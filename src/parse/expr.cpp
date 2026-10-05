@@ -392,8 +392,17 @@ ExprNodeP Parse_ExprBlockLine_Stmt(TokenStream& lex, bool& has_semicolon)
     Token tok;
 
     bool is_paren = lex.lookahead(0) == TOK_PAREN_OPEN;
+    bool is_fragment = lex.lookahead(0) == TOK_INTERPOLATED_EXPR;
 
     auto ret = Parse_Stmt(lex);
+
+    // An `$e:expr` fragment holding a block-like expression ends its statement, as written blocks do
+    if( is_fragment && (dynamic_cast<AST::ExprNode_Block*>(&*ret) || dynamic_cast<AST::ExprNode_If*>(&*ret)
+            || dynamic_cast<AST::ExprNode_Match*>(&*ret) || dynamic_cast<AST::ExprNode_Loop*>(&*ret)) ) {
+        if( lex.lookahead(0) != TOK_SEMICOLON && lex.lookahead(0) != TOK_BRACE_CLOSE && lex.lookahead(0) != TOK_EOF ) {
+            return ret;
+        }
+    }
 
     // If `ret` is a braced macro call, don't require the semicolon (to remove the hackiness above)
     // - Don't trigger this when parens are present
