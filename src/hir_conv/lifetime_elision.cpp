@@ -1115,6 +1115,17 @@ namespace
                         elided_output_lifetime = b->lifetime;
                     }
                 }
+                else if( item.m_receiver == HIR::Function::Receiver::Custom ) {
+                    // A receiver like `Pin<&mut Self>` elides to the lifetime of its reference to `Self`
+                    visit_ty_with(item.m_args[0].second, [&](const HIR::TypeRef& t) {
+                        const auto* b = t.data().opt_Borrow();
+                        if( b && b->inner.data().is_Generic() && b->inner.data().as_Generic().is_self() ) {
+                            elided_output_lifetime = b->lifetime;
+                            return true;
+                        }
+                        return false;
+                    });
+                }
                 if( item.m_receiver == HIR::Function::Receiver::Value ) {
                     m_value_self_type = m_resolve.m_self_type;
                 }
