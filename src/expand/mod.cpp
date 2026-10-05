@@ -11,6 +11,7 @@
 #include <synext.hpp>
 #include <map>
 #include "../macro_rules/macro_rules.hpp"
+#include <target_version.hpp>
 #include "../parse/common.hpp"  // For reparse from macros
 #include <ast/expr.hpp>
 #include <hir/hir.hpp>  // For macro lookup
@@ -1651,7 +1652,9 @@ struct CExpandExpr:
                 // Not a lang item
                 auto path_ControlFlow_Continue = get_path(core_crate, "ops", "ControlFlow", "Continue");
                 auto path_ControlFlow_Break    = get_path(core_crate, "ops", "ControlFlow", "Break"   );
-                auto path_FromResidual_from_residual = get_path(core_crate, "ops", "FromResidual", "from_residual");
+                auto path_FromResidual_from_residual = !m_try_stack.empty() && TARGETVER_LEAST_1_96
+                    ? get_path(core_crate, "ops", "try_trait", "residual_into_try_type")
+                    : get_path(core_crate, "ops", "FromResidual", "from_residual");
 
                 ::std::vector< ::AST::ExprNode_Match_Arm>   arms;
                 // `Continue(v) => v,`
