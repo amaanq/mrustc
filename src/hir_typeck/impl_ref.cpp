@@ -235,8 +235,10 @@ ImplRef::Monomorph ImplRef::get_cb_monomorph_traitimpl(const Span& sp, const ::H
         {
             static const HIR::TypeRef ty_self = ::HIR::TypeRef::new_self();
             if( e.trait_ptr->m_types.count(name) && e.trait_ptr->m_types.at(name).m_default != HIR::TypeRef() ) {
+                const auto& aty = e.trait_ptr->m_types.at(name);
+                auto aty_params = aty.m_generics.make_nop_params(1);
                 // Monomorph twice, first from trait to trait impl, second from trait impl to current
-                auto def = MonomorphStatePtr(&ty_self, &e.impl->m_trait_args, nullptr).monomorph_type(sp, e.trait_ptr->m_types.at(name).m_default);
+                auto def = MonomorphStatePtr(&ty_self, &e.impl->m_trait_args, &aty_params).monomorph_type(sp, aty.m_default);
                 return this->get_cb_monomorph_traitimpl(sp, params).monomorph_type(sp, def);
             }
             return ::HIR::TypeRef();
