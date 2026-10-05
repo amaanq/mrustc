@@ -1245,6 +1245,13 @@ namespace MIR { namespace eval {
                         metadata = val.slice(Target_GetPointerBits()/8);
                     }
                     auto p = val.read_ptr(state);
+                    // A pointer read out of another item's value only names that item, so load its value
+                    // (`SERDE_KEYWORDS.split_at(..)` in schemars_derive's statics)
+                    if( const auto* sr = p.second.as_staticref() ) {
+                        if( sr->size() == 0 ) {
+                            p.second = RelocPtr(get_staticref(sr->path().clone()));
+                        }
+                    }
                     MIR_ASSERT(state, p.first >= EncodedLiteral::PTR_BASE, "Null (<PTR_BASE) pointer deref");
                     MIR_ASSERT(state, p.first % al == 0, "Unaligned pointer deref");
                     DEBUG("> " << ValueRef(p.second) << " - o=" << (p.first - EncodedLiteral::PTR_BASE) << " sz=" << sz << " " << *typ);
@@ -2783,6 +2790,28 @@ namespace HIR {
                     MIR_ASSERT(state, ty.data().is_Primitive(), "`" << te->name << "` with non-primitive " << ty);
                     bool was_overflow = do_arith_checked(local_state, ty, dst, e.args.at(0), ::MIR::eBinOp::DIV, e.args.at(1));
                     MIR_ASSERT(state, !was_overflow, "`" << te->name << "` overflowed");
+                }
+                // `Ord::cmp` on primitives, returns `Ordering` (an i8 of -1/0/1)
+                else if( te->name == "three_way_compare" ) {
+                    auto ty = local_state.monomorph_expand(te->params.m_types.at(0));
+                    auto ti = TypeInfo::for_type(ty);
+                    int cmp;
+                    switch(ti.ty)
+                    {
+                    case TypeInfo::Signed: {
+                        auto l = local_state.read_param_sint(ti.bits, e.args.at(0));
+                        auto r = local_state.read_param_sint(ti.bits, e.args.at(1));
+                        cmp = l < r ? -1 : (r < l ? 1 : 0);
+                        break; }
+                    case TypeInfo::Unsigned: {
+                        auto l = local_state.read_param_uint(ti.bits, e.args.at(0));
+                        auto r = local_state.read_param_uint(ti.bits, e.args.at(1));
+                        cmp = l < r ? -1 : (r < l ? 1 : 0);
+                        break; }
+                    default:
+                        MIR_TODO(state, "three_way_compare on " << ty);
+                    }
+                    dst.write_byte(state, static_cast<uint8_t>(cmp));
                 }
                 // Saturating operations
                 else if( te->name == "saturating_add" ) {

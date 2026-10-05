@@ -1322,6 +1322,10 @@ void HIR_Expand_StaticBorrowConstants_Mark_Expr(const ::HIR::Crate& crate, const
 {
     TRACE_FUNCTION_F(ip);
     StaticTraitResolve  resolve(crate);
+    // A generic impl's const asks whether its type is interior-mutable, which needs the impl's bounds
+    if( exp.m_state ) {
+        resolve.set_both_generics_raw(exp.m_state->m_impl_generics, exp.m_state->m_item_generics);
+    }
 
     // TODO: Get `Self` type
     static_borrow_constants::ExprVisitor_Mark    evm(resolve, nullptr, exp);
