@@ -3540,7 +3540,9 @@ bool TraitResolution::find_trait_impls_crate(const Span& sp,
                 DEBUG("- UfcsKnown of placeholder, returning Fuzzy");
                 return ::HIR::Compare::Fuzzy;
             }
-            TODO(sp, "Check trait bounds for bound on " << type);
+            auto l_res = ::HIR::Compare::Unequal;
+            this->find_trait_impls(sp, trait, *params_ptr, type, [&](auto, auto cmp){ l_res = cmp; return (cmp == ::HIR::Compare::Equal); });
+            return l_res;
             }
         TU_ARMA(UfcsInherent, pe) {
             TODO(sp, "Auto trait lookup on UFCS Inherent type");
