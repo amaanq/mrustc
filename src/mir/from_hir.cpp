@@ -2686,7 +2686,8 @@ namespace {
                 m_builder.set_result(node.span(), mv$(res));
                 }
             TU_ARMA(ByteString, e) {
-                auto v = mv$( *reinterpret_cast< ::std::vector<uint8_t>*>( &e) );
+                // Copied, not moved: a constant can be lowered again after evaluation (icu_locale_data's baked statics)
+                auto v = *reinterpret_cast< const ::std::vector<uint8_t>*>( &e);
                 m_builder.set_result(node.span(), ::MIR::RValue::make_Constant( ::MIR::Constant(mv$(v)) ));
                 }
             }
