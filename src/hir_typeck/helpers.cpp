@@ -2313,6 +2313,9 @@ void TraitResolution::expand_associated_types_inplace(const Span& sp, ::HIR::Typ
     {
         if( input == *ty ) {
             DEBUG("Recursive lookup, skipping - &input = " << &input);
+            if( input.data().is_Path() && input.data().as_Path().binding.is_Unbound() && !m_ivars.type_contains_ivars(input, false) ) {
+                input.data_mut().as_Path().binding = ::HIR::TypePathBinding::make_Opaque({});
+            }
             return ;
         }
     }
