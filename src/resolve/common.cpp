@@ -118,6 +118,12 @@ namespace {
                     }
 
                     DEBUG("Ignore last");
+                    if(out_path) {
+                        out_path->crate = base_path.m_class.is_Absolute() ? base_path.m_class.as_Absolute().crate : RcString();
+                        out_path->nodes.clear();
+                        for(const auto& n : base_nodes)
+                            out_path->nodes.push_back(n.name());
+                    }
                     return ResolveModuleRef(&this->get_mod_by_true_path(base_nodes, base_nodes.size()));
                 }
                 const auto& name = e.nodes.front().name();

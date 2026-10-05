@@ -269,7 +269,28 @@ class CMacroExportHandler:
 
             e.data->m_exported = true;
             DEBUG("- Export macro " << name << "!");
+            const MacroRules* exported = &*e.data;
             crate.m_root_module.macros().push_back( mv$(e) );
+
+            auto old_path = mod.path() + name;
+            ::std::function<void(AST::Module&)> repoint = [&](AST::Module& m) {
+                for(auto& mi : m.m_macro_imports)
+                {
+                    if( mi.ref.is_MacroRules() && mi.ref.as_MacroRules() == exported && mi.path == old_path )
+                        mi.path = AST::AbsolutePath("", {name});
+                }
+                for(auto& it : m.m_items)
+                {
+                    if( it->data.is_Module() )
+                        repoint(it->data.as_Module());
+                }
+                for(auto& am : m.anon_mods())
+                {
+                    if( am )
+                        repoint(*am);
+                }
+            };
+            repoint(crate.m_root_module);
         }
         else if( i.is_Macro() ) {
             const auto& name = path.nodes.back();
