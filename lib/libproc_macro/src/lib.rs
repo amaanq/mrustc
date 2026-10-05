@@ -38,6 +38,15 @@ mod diagnostic;
 
 pub mod tracked_env;
 pub mod tracked_path;
+/// 1.96 merges `tracked_env::var` and `tracked_path::path` into `tracked`
+pub mod tracked {
+    pub fn env_var<K: ::std::convert::AsRef<::std::ffi::OsStr> + ::std::convert::AsRef<str>>(key: K) -> Result<String, ::std::env::VarError> {
+        crate::tracked_env::var(key)
+    }
+    pub fn path<P: ::std::convert::AsRef<::std::path::Path>>(path: P) {
+        let _ = path;
+    }
+}
 
 pub mod token_stream {
 

@@ -65,6 +65,20 @@ impl Span
         }
     }
 
+    // 1.88 - one-indexed, as mrustc's own columns are
+    pub fn line(&self) -> usize {
+        match unsafe { assert!(SPANS_COMPLETE); SPANS.get(self.0) } {
+        Some(&Some(ref v)) => v.lines.start,
+        _ => 1,
+        }
+    }
+    pub fn column(&self) -> usize {
+        match unsafe { assert!(SPANS_COMPLETE); SPANS.get(self.0) } {
+        Some(&Some(ref v)) => v.bytes.start,
+        _ => 1,
+        }
+    }
+
     // 1.88
     pub fn local_file(&self) -> Option<::std::path::PathBuf> {
         match unsafe { assert!(SPANS_COMPLETE); SPANS.get(self.0) } {
