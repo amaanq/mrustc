@@ -5242,11 +5242,8 @@ bool TraitResolution::find_method(const Span& sp,
         }
     }
 
-    // 5. Mutually exclusive searches
-    // - Erased type - `impl Trait`
-    if( const auto* ityp = get_inner_type(ty, [](const auto& t){ return t.data().is_ErasedType(); }, false) )
-    {
-        const auto& e = ityp->data().as_ErasedType();
+    auto search_erased = [&](const ::HIR::TypeRef& ity, bool via_wrapper) {
+        const auto& e = ity.data().as_ErasedType();
         for(const auto& trait_path : e.m_traits)
         {
             const auto& trait = this->m_crate.get_trait_by_path(sp, trait_path.m_path.m_path);
@@ -5256,7 +5253,8 @@ bool TraitResolution::find_method(const Span& sp,
             {
                 DEBUG("- Found trait " << final_trait_path << " (erased type)");
 
-                if(const auto* self_ty_p = check_method_receiver(sp, *fcn_ptr, ty, access))
+                const auto* self_ty_p = check_method_receiver(sp, *fcn_ptr, ty, access);
+                if( self_ty_p && (!via_wrapper || *self_ty_p == ity) )
                 {
                     possibilities.push_back(::std::make_pair(borrow_type, ::HIR::Path(self_ty_p->clone(), mv$(final_trait_path), method_name, {}) ));
                     DEBUG("++ " << possibilities.back());
@@ -5264,6 +5262,23 @@ bool TraitResolution::find_method(const Span& sp,
                 }
             }
         }
+    };
+    auto is_erased = [](const ::HIR::TypeRef& t){ return t.data().is_ErasedType(); };
+    if( !get_inner_type(ty, is_erased, false) )
+    {
+        if( const auto* ityp = get_inner_type(ty, is_erased, true) )
+        {
+            search_erased(*ityp, true);
+            if( rv )
+                return rv;
+        }
+    }
+
+    // 5. Mutually exclusive searches
+    // - Erased type - `impl Trait`
+    if( const auto* ityp = get_inner_type(ty, is_erased, false) )
+    {
+        search_erased(*ityp, false);
     }
     // Generics: Nothing except the bounds (Which have already been checked)
     else if( get_inner_type(ty, [](const auto& t){ return t.data().is_Generic(); }, false) )
