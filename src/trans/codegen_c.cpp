@@ -3716,7 +3716,7 @@ namespace {
             }
         }
 
-        void emit_composite_assign(
+        bool emit_composite_assign(
             const ::MIR::TypeResolve& mir_res, ::std::function<void()> emit_slot,
             const ::std::vector<::MIR::Param>& vals,
             unsigned indent_level, bool prepend_newline=true
@@ -3753,6 +3753,7 @@ namespace {
                 m_of << "._" << j << " = ";
                 emit_param(vals[j]);
             }
+            return has_emitted;
         }
 
         void emit_statement(const ::MIR::TypeResolve& mir_res, const ::MIR::Statement& stmt, unsigned indent_level=1)
@@ -4233,9 +4234,21 @@ namespace {
                         }
                         }
                     TU_ARMA(Linear, re) {
-                        bool emit_newline = false;
+                        // The tag can overlap another variant's fields, which a value may be read from (`*p = B(*field_of_p)`)
+                        bool has_fields = false;
+                        if( enm_p->is_value() )
+                        {
+                            // Value enums have no data fields
+                        }
+                        else
+                        {
+                            has_fields = emit_composite_assign(mir_res, [&](){ emit_lvalue(e.dst); m_of << ".DATA.var_" << ve.index; }, ve.vals, indent_level, false);
+                        }
                         if( !re.is_niche(ve.index) )
                         {
+                            if( has_fields ) {
+                                m_of << ";\n" << indent;
+                            }
                             // Each variant has its own tag field, it will be the last numbered field in that variant slot
                             // - Only use that if there isn't an explicit tag field in the enum
                             if( re.field.sub_fields.empty() || type_is_bad_zst(repr->fields[ve.index].ty) ) {
@@ -4250,30 +4263,21 @@ namespace {
                                 //m_of << "); ";
                                 emit_lvalue(e.dst); m_of << ".DATA.var_" << ve.index << "._" << (vr->fields.size() - 1) << " = " << (re.offset + ve.index);
                             }
-                            emit_newline = true;
                         }
                         else {
                             m_of << "/* Niche tag */";
                         }
-                        if( enm_p->is_value() )
-                        {
-                            // Value enums have no data fields
-                        }
-                        else
-                        {
-                            emit_composite_assign(mir_res, [&](){ emit_lvalue(e.dst); m_of << ".DATA.var_" << ve.index; }, ve.vals, indent_level, emit_newline);
-                        }
                         }
                     TU_ARMA(Values, re) {
+                        if( !enm_p->is_value() && emit_composite_assign(mir_res, [&](){ emit_lvalue(e.dst); m_of << ".DATA.var_" << ve.index; }, ve.vals, indent_level, false) )
+                        {
+                            m_of << ";\n" << indent;
+                        }
                         if( re.field.index == 0 ) {
                             emit_lvalue(e.dst); m_of << ".TAG = "; emit_enum_variant_val(repr, ve.index);
                         }
                         else {
                             emit_lvalue(e.dst); m_of << ".DATA.TAG = "; emit_enum_variant_val(repr, ve.index);
-                        }
-                        if( !enm_p->is_value() )
-                        {
-                            emit_composite_assign(mir_res, [&](){ emit_lvalue(e.dst); m_of << ".DATA.var_" << ve.index; }, ve.vals, indent_level, true);
                         }
                         }
                     }
