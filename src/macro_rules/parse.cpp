@@ -150,7 +150,8 @@ public:
                     ty = MacroPatEnt::PAT_IDENT;
                 else if( type == "path" )
                     ty = MacroPatEnt::PAT_PATH;
-                else if( type == "expr" )
+                // 1.83 - `expr_2021` is the pre-2024 `expr`, which excluded `_` and `const { .. }`
+                else if( type == "expr" || type == "expr_2021" )
                     ty = MacroPatEnt::PAT_EXPR;
                 else if( type == "stmt" )
                     ty = MacroPatEnt::PAT_STMT;

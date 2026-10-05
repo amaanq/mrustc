@@ -16,6 +16,8 @@
 #include <ast/expr.hpp>
 #include <ast/crate.hpp>
 #include <hir/hir.hpp>  // HIR::Crate
+#include <ast/expr.hpp>
+bool is_literal_expr_frag(const Token& tok);
 
  // Map of: LoopIndex=>(Path=>Count)
 typedef std::map<unsigned, std::map< std::vector<unsigned>, unsigned > >    loop_counts_t;
@@ -603,12 +605,39 @@ InterpolatedFragment Macro_HandlePatternCap(TokenStream& lex, MacroPatEnt::Type 
         case TOK_RWORD_TRUE:
         case TOK_RWORD_FALSE:
             break;
+        case TOK_INTERPOLATED_EXPR:
+            if( is_literal_expr_frag(tok) ) {
+                // Turn the forwarded expression back into its literal token (fragments can't be copied)
+                const auto* n = &tok.frag_node();
+                if( const auto* e = dynamic_cast<const AST::ExprNode_String*>(n) )
+                    tok = Token(TOK_STRING, e->m_value, e->m_hygiene);
+                else if( const auto* e = dynamic_cast<const AST::ExprNode_ByteString*>(n) )
+                    tok = Token(TOK_BYTESTRING, e->m_value, lex.get_hygiene());
+                else if( const auto* e = dynamic_cast<const AST::ExprNode_Integer*>(n) )
+                    tok = Token(e->m_value, e->m_datatype);
+                else if( const auto* e = dynamic_cast<const AST::ExprNode_Float*>(n) )
+                    tok = Token::make_float(e->m_value, e->m_datatype);
+                else
+                    tok = Token(dynamic_cast<const AST::ExprNode_Bool*>(n)->m_value ? TOK_RWORD_TRUE : TOK_RWORD_FALSE);
+                break;
+            }
         default:
             throw ParseError::Unexpected(lex, tok, {TOK_INTEGER, TOK_FLOAT, TOK_STRING, TOK_BYTESTRING, TOK_RWORD_TRUE, TOK_RWORD_FALSE});
         }
         return InterpolatedFragment( TokenTree(lex.get_edition(), lex.get_hygiene(), tok) );
     }
     throw "";
+}
+
+/// A forwarded `$e:expr` that is a plain literal still matches `$l:literal` (icu_locale_core's `subtag!($key)`)
+bool is_literal_expr_frag(const Token& tok)
+{
+    if( tok.type() != TOK_INTERPOLATED_EXPR )
+        return false;
+    const auto* n = &const_cast<Token&>(tok).frag_node();
+    return dynamic_cast<const AST::ExprNode_String*>(n) || dynamic_cast<const AST::ExprNode_ByteString*>(n)
+        || dynamic_cast<const AST::ExprNode_Integer*>(n) || dynamic_cast<const AST::ExprNode_Float*>(n)
+        || dynamic_cast<const AST::ExprNode_Bool*>(n);
 }
 
 /// Parse the input TokenTree according to the `macro_rules!` patterns and return a token stream of the replacement
@@ -2043,6 +2072,12 @@ namespace
             case TOK_RWORD_FALSE:
                 lex.consume();
                 return true;
+            case TOK_INTERPOLATED_EXPR:
+                if( is_literal_expr_frag(lex.next_tok()) ) {
+                    lex.consume();
+                    return true;
+                }
+                return false;
             default:
                 return false;
             }
@@ -2438,10 +2473,16 @@ Token MacroExpander::realGetToken()
                     else {
                         tok = can_steal ? Token(Token::TagTakeIP(), mv$(*frag) ) : Token(*frag);
                     }
-                    if( tok != TOK_IDENT ) {
+                    // 1.96's error codes concatenate integer literals (`${concat(E, $num)}` with `0001`)
+                    if( tok == TOK_INTEGER && tok.datatype() == CORETYPE_ANY ) {
+                        new_ident += tok.to_str();
+                    }
+                    else if( tok != TOK_IDENT ) {
                         ERROR(this->point_span(), E0000, "concat with non-ident: " << tok);
                     }
-                    new_ident += tok.ident().name.c_str();
+                    else {
+                        new_ident += tok.ident().name.c_str();
+                    }
                     }
                 TU_ARMA(Ident, v) {
                     new_ident += v.name.c_str();

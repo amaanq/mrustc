@@ -1145,6 +1145,19 @@ AST::Attribute Parse_MetaItem(TokenStream& lex)
     auto ps = lex.start_span();
 
     AST::AttributeName  name;
+    // A `$t:ty` re-emitted as `#[$t]` (icu_locale_core's `[default]` variants) names the attribute by its path
+    if( lex.lookahead(0) == TOK_INTERPOLATED_TYPE )
+    {
+        GET_TOK(tok, lex);
+        auto& ty = tok.frag_type();
+        if( !ty.is_path() || !ty.path().is_relative() ) {
+            throw ParseError::Unexpected(lex, tok, TOK_IDENT);
+        }
+        for(const auto& n : ty.path().nodes()) {
+            name.elems.push_back( n.name() );
+        }
+        return AST::Attribute(lex.end_span(ps), name, TokenTree());
+    }
     // NOTE: After 1.19 mode, values can be present with no name
     if( TARGETVER_LEAST_1_29
         && lex.lookahead(0) != TOK_IDENT

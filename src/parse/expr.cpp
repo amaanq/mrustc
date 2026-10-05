@@ -298,6 +298,9 @@ ExprNodeP Parse_ExprBlockLine(TokenStream& lex, bool *add_silence)
         {
         case TOK_INTERPOLATED_BLOCK:
             return tok.take_frag_node();
+        // A `$s:stmt` is a whole statement, and more can follow it without a `;` (icu_locale_core's `$aliases`)
+        case TOK_INTERPOLATED_STMT:
+            return tok.take_frag_node();
         case TOK_SEMICOLON:
             // Return a NULL expression, nothing here.
             return nullptr;
