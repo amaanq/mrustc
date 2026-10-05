@@ -386,6 +386,7 @@ namespace {
             //rv.m_exported = true;
             rv.m_is_macro_item = m_in.read_bool();
             rv.m_rules = deserialise_vec_c< ::MacroRulesArm>( [&](){ return deserialise_macrorulesarm(); });
+            rv.m_derive_rules = deserialise_vec_c< ::MacroRulesArm>( [&](){ return deserialise_macrorulesarm(); });
             rv.m_hygiene = deserialise_hygine();
             return rv;
         }

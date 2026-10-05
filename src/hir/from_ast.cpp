@@ -2176,7 +2176,7 @@ void _add_mod_mac_item(::HIR::Module& mod, RcString name, ::HIR::Publicity is_pu
         if( mac.data || mac.vis.is_global() )
         {
             ASSERT_BUG(mac.span, mac.data, "Null macro - " << mac.name);
-            ASSERT_BUG(mac.span, mac.data->m_rules.size() > 0, "Empty macro - " << mac.name);
+            ASSERT_BUG(mac.span, !mac.data->is_empty(), "Empty macro - " << mac.name);
             _add_mod_mac_item(mod, mac.name, get_vis(mac.vis), std::move(mac.data));
         }
     }
@@ -2518,7 +2518,7 @@ public:
                     }
                     else {
                         assert(mac.data);
-                        assert(!mac.data->m_rules.empty());
+                        assert(!mac.data->is_empty());
                         auto pc = mod.path().nodes;
                         pc.push_back(mac.name);
                         mi = HIR::MacroItem::make_Import({ ::HIR::SimplePath(g_crate_name, std::move(pc)) });
@@ -2533,14 +2533,14 @@ public:
                             rv.m_exported_macro_names.push_back(mac.name);
                         }
                         if(res.first->second.is_MacroRules() ) {
-                            ASSERT_BUG(Span(), !res.first->second.as_MacroRules()->m_rules.empty(), "Empty macro? - " << mac.name);
+                            ASSERT_BUG(Span(), !res.first->second.as_MacroRules()->is_empty(), "Empty macro? - " << mac.name);
                         }
                     }
 
 #if 1
                     for(auto& e : macros) {
                         if(e.second.is_MacroRules() ) {
-                            ASSERT_BUG(Span(), !e.second.as_MacroRules()->m_rules.empty(), "Empty macro? - " << e.first);
+                            ASSERT_BUG(Span(), !e.second.as_MacroRules()->is_empty(), "Empty macro? - " << e.first);
                         }
                     }
 #endif
@@ -2660,7 +2660,7 @@ public:
     for(auto& e : macros)
     {
         if(e.second.is_MacroRules() ) {
-            ASSERT_BUG(Span(), !e.second.as_MacroRules()->m_rules.empty(), "Empty macro? - " << e.first);
+            ASSERT_BUG(Span(), !e.second.as_MacroRules()->is_empty(), "Empty macro? - " << e.first);
         }
         rv.m_root_module.m_macro_items.insert( ::std::make_pair(e.first, box$(HIR::VisEnt<HIR::MacroItem> { HIR::Publicity::new_global(), mv$(e.second) })) );
     }
@@ -2910,6 +2910,10 @@ public:
                             mr.m_source_crate = g_crate_name;
                         }
                         for(auto& rule : mr.m_rules)
+                        {
+                            fix_macro_contents(rule.m_contents);
+                        }
+                        for(auto& rule : mr.m_derive_rules)
                         {
                             fix_macro_contents(rule.m_contents);
                         }

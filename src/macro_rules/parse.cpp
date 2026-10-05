@@ -24,6 +24,7 @@ public:
     ::std::vector<MacroPatEnt>  m_pattern;
     Span    m_pat_span;
     ::std::vector<MacroExpansionEnt> m_contents;
+    bool    m_is_derive = false;
 
     MacroRule() {}
     MacroRule(MacroRule&&) = default;
@@ -555,6 +556,16 @@ MacroRule Parse_MacroRules_Var(TokenStream& lex)
 
     MacroRule   rule;
 
+    if( lex.lookahead(0) == TOK_IDENT && lex.lookahead(1) == TOK_PAREN_OPEN && lex.lookahead(2) == TOK_PAREN_CLOSE )
+    {
+        GET_TOK(tok, lex);
+        if( tok.ident().name != "derive" )
+            throw ParseError::Unexpected(lex, tok);
+        GET_CHECK_TOK(tok, lex, TOK_PAREN_OPEN);
+        GET_CHECK_TOK(tok, lex, TOK_PAREN_CLOSE);
+        rule.m_is_derive = true;
+    }
+
     // Pattern
     enum eTokenType close;
     switch(GET_TOK(tok, lex))
@@ -654,7 +665,8 @@ MacroRulesPtr Parse_MacroRules(TokenStream& lex)
     // Re-parse the patterns into a unified form
     for(auto& rule : rules)
     {
-        rv->m_rules.push_back( Parse_MacroRules_MakeArm(rule.m_pat_span, mv$(rule.m_pattern), mv$(rule.m_contents)) );
+        auto& dst = rule.m_is_derive ? rv->m_derive_rules : rv->m_rules;
+        dst.push_back( Parse_MacroRules_MakeArm(rule.m_pat_span, mv$(rule.m_pattern), mv$(rule.m_contents)) );
     }
 
     return rv;

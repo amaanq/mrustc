@@ -204,6 +204,9 @@ public:
 
     /// Expansion rules
     ::std::vector<MacroRulesArm>  m_rules;
+    ::std::vector<MacroRulesArm>  m_derive_rules;
+
+    bool is_empty() const { return m_rules.empty() && m_derive_rules.empty(); }
 
     MacroRules(RcString source_crate, AST::Edition edition)
         : m_source_crate(std::move(source_crate))
@@ -215,6 +218,7 @@ public:
 };
 
 extern ::std::unique_ptr<TokenStream>   Macro_InvokeRules(const RcString& name, const MacroRules& rules, const Span& sp, TokenTree input, const AST::Crate& crate, AST::Module& mod);
+extern ::std::unique_ptr<TokenStream>   Macro_InvokeDerive(const RcString& name, const MacroRules& rules, const Span& sp, TokenTree input, const AST::Crate& crate, AST::Module& mod);
 
 /// Parse a full `macro_rules` block
 extern MacroRulesPtr    Parse_MacroRules(TokenStream& lex);

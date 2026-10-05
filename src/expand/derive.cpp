@@ -14,6 +14,7 @@
 #include <parse/common.hpp>    // Parse_ModRoot_Items
 #include <parse/ttstream.hpp>
 #include "proc_macro.hpp"
+#include <macro_rules/macro_rules.hpp>
 #include "common.hpp"   // Expand_LookupMacro
 
 namespace {
@@ -2069,9 +2070,10 @@ namespace {
         return type;
     }
 
-    std::vector<RcString> find_macro(const Span& sp, const AST::Crate& crate, const AST::Module& mod, const AST::Path& trait_path)
+    std::vector<RcString> find_macro(const Span& sp, const AST::Crate& crate, const AST::Module& mod, const AST::Path& trait_path, const MacroRules*& out_rules)
     {
         std::vector<RcString>   mac_path;
+        out_rules = nullptr;
 
         if( trait_path.is_trivial() )
         {
@@ -2113,7 +2115,7 @@ namespace {
                 TODO(sp, "Handle builtin proc macro");
                 }
             TU_ARMA(MacroRules, mr_ptr) {
-                TODO(sp, "Custom derive using macro_rules?");
+                out_rules = mr_ptr;
                 }
             }
         }
@@ -2154,7 +2156,16 @@ static void derive_item(const Span& sp, const AST::Crate& crate, AST::Module& mo
 
         // TODO: Handle full paths to standard library traits
 
-        std::vector<RcString>   mac_path = find_macro(sp, crate, mod, trait_path);
+        const MacroRules* mac_rules;
+        std::vector<RcString>   mac_path = find_macro(sp, crate, mod, trait_path, mac_rules);
+        if( mac_rules )
+        {
+            auto input = ProcMacro_ItemTokens(sp, crate.m_edition, attrs, vis, path.nodes.back(), item);
+            auto lex = Macro_InvokeDerive(trait_path.is_trivial() ? trait_path.as_trivial() : trait_path.nodes().back().name(), *mac_rules, sp, mv$(input), crate, mod);
+            lex->parse_state().module = &mod;
+            Parse_ModRoot_Items(*lex, mod);
+            continue;
+        }
         if( !mac_path.empty() )
         {
             auto lex = ProcMacro_Invoke(sp, crate, mac_path, attrs, vis, path.nodes.back(), item);

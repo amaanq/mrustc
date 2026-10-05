@@ -227,8 +227,25 @@ enum class FragType
     Block = 6,
     Pattern = 7,
 };
+class TokenSink
+{
+public:
+    virtual void send_symbol(const char* val) = 0;
+    virtual void send_rword(const char* val) = 0;
+    virtual void send_ident(const char* val) = 0;
+    virtual void send_ident(const Ident& val) = 0;
+    virtual void send_lifetime(const char* val) = 0;
+    virtual void send_string(const ::std::string& s) = 0;
+    virtual void send_bytestring(const ::std::string& s) = 0;
+    virtual void send_char(uint32_t ch) = 0;
+    virtual void send_int(eCoreType ct, U128 v) = 0;
+    virtual void send_float(eCoreType ct, double v) = 0;
+    virtual bool attr_is_used(const RcString& n) const = 0;
+};
+
 struct ProcMacroInv:
-    public TokenStream
+    public TokenStream,
+    public TokenSink
 {
     Span    m_parent_span;
     Span    m_this_span;
@@ -279,15 +296,15 @@ public:
         m_dump_file_out.flush();
         DEBUG("Input tokens sent");
     }
-    void send_symbol(const char* val) {
+    void send_symbol(const char* val) override {
         this->send_u8(static_cast<uint8_t>(TokenClass::Symbol));
         this->send_bytes(val, ::std::strlen(val));
     }
-    void send_rword(const char* val) {
+    void send_rword(const char* val) override {
         this->send_u8(static_cast<uint8_t>(TokenClass::Ident));
         this->send_bytes(val, ::std::strlen(val));
     }
-    void send_ident(const char* val) {
+    void send_ident(const char* val) override {
         this->send_u8(static_cast<uint8_t>(TokenClass::Ident));
         if( Lex_FindReservedWord(val, m_edition) != TOK_NULL ) {
             auto size = ::std::strlen(val);
@@ -299,26 +316,26 @@ public:
             this->send_bytes(val, ::std::strlen(val));
         }
     }
-    void send_ident(const Ident& val) {
+    void send_ident(const Ident& val) override {
         send_ident(val.name.c_str());
     }
-    void send_lifetime(const char* val) {
+    void send_lifetime(const char* val) override {
         this->send_u8(static_cast<uint8_t>(TokenClass::Lifetime));
         this->send_bytes(val, ::std::strlen(val));
     }
-    void send_string(const ::std::string& s) {
+    void send_string(const ::std::string& s) override {
         this->send_u8(static_cast<uint8_t>(TokenClass::String));
         this->send_bytes(s.data(), s.size());
     }
-    void send_bytestring(const ::std::string& s) {
+    void send_bytestring(const ::std::string& s) override {
         this->send_u8(static_cast<uint8_t>(TokenClass::ByteString));
         this->send_bytes(s.data(), s.size());
     }
-    void send_char(uint32_t ch) {
+    void send_char(uint32_t ch) override {
         this->send_u8(static_cast<uint8_t>(TokenClass::CharLit));
         this->send_v128u(ch);
     }
-    void send_int(eCoreType ct, U128 v) {
+    void send_int(eCoreType ct, U128 v) override {
         uint8_t size;
         switch(ct)
         {
@@ -348,7 +365,7 @@ public:
         }
         this->send_v128u(v);
     }
-    void send_float(eCoreType ct, double v) {
+    void send_float(eCoreType ct, double v) override {
         this->send_u8(static_cast<uint8_t>(TokenClass::Float));
         switch(ct)
         {
@@ -386,7 +403,7 @@ public:
         }
     }
 
-    bool attr_is_used(const RcString& n) const {
+    bool attr_is_used(const RcString& n) const override {
         if( n == "repr" )
             return true;
         return ::std::find(m_proc_macro_desc.attributes.begin(), m_proc_macro_desc.attributes.end(), n) != m_proc_macro_desc.attributes.end();
@@ -464,9 +481,9 @@ namespace {
     struct Visitor
     {
         const Span& sp;
-        ProcMacroInv&   m_pmi;
+        TokenSink&   m_pmi;
         bool emit_all_attrs;
-        Visitor(const Span& sp, ProcMacroInv& pmi):
+        Visitor(const Span& sp, TokenSink& pmi):
             sp(sp),
             m_pmi(pmi)
             //,emit_all_attrs(false)
@@ -1254,7 +1271,7 @@ namespace {
                 m_pmi.send_symbol("]");
             }
             else {
-                DEBUG("Skip " << a << " (" << m_pmi.m_proc_macro_desc.attributes << ")");
+                DEBUG("Skip " << a);
             }
         }
         void visit_meta_item(const ::AST::Attribute& i)
@@ -1693,6 +1710,76 @@ namespace {
         v.visit_top_attrs(attrs);
         v.visit_union(item_name, vis, i);
         });
+}
+namespace {
+    class TreeSink:
+        public TokenSink
+    {
+        AST::Edition    m_edition;
+    public:
+        ::std::vector<TokenTree>    m_tokens;
+
+        TreeSink(AST::Edition edition): m_edition(edition) {}
+
+        void push(Token tok) {
+            m_tokens.push_back(TokenTree(m_edition, mv$(tok)));
+        }
+        void send_symbol(const char* val) override {
+            auto t = Lex_FindOperator(val);
+            ASSERT_BUG(Span(), t != TOK_NULL, "Unknown symbol - '" << val << "'");
+            push(Token(t));
+        }
+        void send_rword(const char* val) override {
+            auto t = Lex_FindReservedWord(val, m_edition);
+            push(t != TOK_NULL ? Token(t) : Token(TOK_IDENT, Ident(RcString::new_interned(val))));
+        }
+        void send_ident(const char* val) override {
+            send_ident(Ident(RcString::new_interned(val)));
+        }
+        void send_ident(const Ident& val) override {
+            push(val.name == "_" ? Token(TOK_UNDERSCORE) : Token(TOK_IDENT, val));
+        }
+        void send_lifetime(const char* val) override {
+            push(Token(TOK_LIFETIME, Ident(RcString::new_interned(val))));
+        }
+        void send_string(const ::std::string& s) override {
+            push(Token(TOK_STRING, s, Ident::Hygiene()));
+        }
+        void send_bytestring(const ::std::string& s) override {
+            push(Token(TOK_BYTESTRING, s, Ident::Hygiene()));
+        }
+        void send_char(uint32_t ch) override {
+            push(Token(U128(ch), CORETYPE_CHAR));
+        }
+        void send_int(eCoreType ct, U128 v) override {
+            push(Token(v, ct));
+        }
+        void send_float(eCoreType ct, double v) override {
+            push(Token::make_float(v, ct));
+        }
+        bool attr_is_used(const RcString& n) const override {
+            return false;
+        }
+    };
+    TokenTree item_tokens(const Span& sp, AST::Edition edition, std::function<void(Visitor& v)> cb)
+    {
+        TreeSink    sink(edition);
+        Visitor v(sp, sink);
+        cb(v);
+        return TokenTree(edition, Ident::Hygiene(), mv$(sink.m_tokens));
+    }
+}
+TokenTree ProcMacro_ItemTokens(const Span& sp, AST::Edition edition, slice<const AST::Attribute> attrs, const AST::Visibility& vis, const RcString& item_name, const ::AST::Struct& i)
+{
+    return item_tokens(sp, edition, [&](Visitor& v){ v.visit_top_attrs(attrs); v.visit_struct(item_name, vis, i); });
+}
+TokenTree ProcMacro_ItemTokens(const Span& sp, AST::Edition edition, slice<const AST::Attribute> attrs, const AST::Visibility& vis, const RcString& item_name, const ::AST::Enum& i)
+{
+    return item_tokens(sp, edition, [&](Visitor& v){ v.visit_top_attrs(attrs); v.visit_enum(item_name, vis, i); });
+}
+TokenTree ProcMacro_ItemTokens(const Span& sp, AST::Edition edition, slice<const AST::Attribute> attrs, const AST::Visibility& vis, const RcString& item_name, const ::AST::Union& i)
+{
+    return item_tokens(sp, edition, [&](Visitor& v){ v.visit_top_attrs(attrs); v.visit_union(item_name, vis, i); });
 }
 // --- attribute
 ::std::unique_ptr<TokenStream> ProcMacro_Invoke(

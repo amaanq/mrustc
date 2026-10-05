@@ -13,6 +13,11 @@ extern ::std::unique_ptr<TokenStream> ProcMacro_Invoke(const Span& sp, const ::A
 extern ::std::unique_ptr<TokenStream> ProcMacro_Invoke(const Span& sp, const ::AST::Crate& crate, const ::std::vector<RcString>& mac_path, slice<const AST::Attribute> attrs, const AST::Visibility& vis, const RcString& name, const ::AST::Enum& i);
 extern ::std::unique_ptr<TokenStream> ProcMacro_Invoke(const Span& sp, const ::AST::Crate& crate, const ::std::vector<RcString>& mac_path, slice<const AST::Attribute> attrs, const AST::Visibility& vis, const RcString& name, const ::AST::Union& i);
 
+// Item tokens for `macro_rules` derive arms
+extern TokenTree ProcMacro_ItemTokens(const Span& sp, AST::Edition edition, slice<const AST::Attribute> attrs, const AST::Visibility& vis, const RcString& name, const ::AST::Struct& i);
+extern TokenTree ProcMacro_ItemTokens(const Span& sp, AST::Edition edition, slice<const AST::Attribute> attrs, const AST::Visibility& vis, const RcString& name, const ::AST::Enum& i);
+extern TokenTree ProcMacro_ItemTokens(const Span& sp, AST::Edition edition, slice<const AST::Attribute> attrs, const AST::Visibility& vis, const RcString& name, const ::AST::Union& i);
+
 // Attribute macros
 extern ::std::unique_ptr<TokenStream> ProcMacro_Invoke(
     const Span& sp, const ::AST::Crate& crate, const ::std::vector<RcString>& mac_path, const TokenTree& tt,

@@ -2728,7 +2728,7 @@ void Expand(::AST::Crate& crate)
                     auto res = exported_macros.insert( mv$(v) );
                     DEBUG("- Import " << mac.name << "! (from \"" << res.first->second->m_source_crate << "\")");
                 }
-                else if( v.second->m_rules.empty() ) {
+                else if( v.second->is_empty() ) {
                     // Skip
                 }
                 else {

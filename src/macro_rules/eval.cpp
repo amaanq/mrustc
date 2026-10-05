@@ -181,7 +181,7 @@ public:
 };
 
 // === Prototypes ===
-unsigned int Macro_InvokeRules_MatchPattern(const Span& sp, const MacroRules& rules, TokenTree input, const AST::Crate& crate, AST::Module& mod,  ParameterMappings& bound_tts);
+unsigned int Macro_InvokeRules_MatchPattern(const Span& sp, const ::std::vector<MacroRulesArm>& arms, TokenTree input, const AST::Crate& crate, AST::Module& mod,  ParameterMappings& bound_tts);
 void Macro_InvokeRules_CountSubstUses(ParameterMappings& bound_tts, const ::std::vector<MacroExpansionEnt>& contents);
 
 // ------------------------------------
@@ -641,16 +641,16 @@ bool is_literal_expr_frag(const Token& tok)
 }
 
 /// Parse the input TokenTree according to the `macro_rules!` patterns and return a token stream of the replacement
-::std::unique_ptr<TokenStream> Macro_InvokeRules(const RcString& name, const MacroRules& rules, const Span& sp, TokenTree input, const AST::Crate& crate, AST::Module& mod)
+static ::std::unique_ptr<TokenStream> Macro_InvokeArms(const RcString& name, const MacroRules& rules, const ::std::vector<MacroRulesArm>& arms, const Span& sp, TokenTree input, const AST::Crate& crate, AST::Module& mod)
 {
     TRACE_FUNCTION_F("'" << name << "', " << input);
     DEBUG("rules.m_source_crate = " << rules.m_source_crate);
     DEBUG("rules.m_hygiene = " << rules.m_hygiene);
 
     ParameterMappings   bound_tts;
-    unsigned int    rule_index = Macro_InvokeRules_MatchPattern(sp, rules, mv$(input), crate, mod,  bound_tts);
+    unsigned int    rule_index = Macro_InvokeRules_MatchPattern(sp, arms, mv$(input), crate, mod,  bound_tts);
 
-    const auto& rule = rules.m_rules.at(rule_index);
+    const auto& rule = arms.at(rule_index);
 
     DEBUG( "Using macro '" << name << "' #" << rule_index << " - " << rule.m_contents.size() << " rule contents with " << bound_tts.mappings().size() << " bound values");
     for( unsigned int i = 0; i < ::std::min( bound_tts.mappings().size(), rule.m_param_names.size() ); i ++ )
@@ -668,6 +668,14 @@ bool is_literal_expr_frag(const Token& tok)
         );
 
     return ::std::unique_ptr<TokenStream>( ret_ptr );
+}
+::std::unique_ptr<TokenStream> Macro_InvokeRules(const RcString& name, const MacroRules& rules, const Span& sp, TokenTree input, const AST::Crate& crate, AST::Module& mod)
+{
+    return Macro_InvokeArms(name, rules, rules.m_rules, sp, mv$(input), crate, mod);
+}
+::std::unique_ptr<TokenStream> Macro_InvokeDerive(const RcString& name, const MacroRules& rules, const Span& sp, TokenTree input, const AST::Crate& crate, AST::Module& mod)
+{
+    return Macro_InvokeArms(name, rules, rules.m_derive_rules, sp, mv$(input), crate, mod);
 }
 
 // Collection of functions that consume a specific fragment type from a token stream
@@ -2086,17 +2094,18 @@ namespace
     }
 }
 
-unsigned int Macro_InvokeRules_MatchPattern(const Span& sp, const MacroRules& rules, TokenTree input, const AST::Crate& crate, AST::Module& mod,  ParameterMappings& bound_tts)
+unsigned int Macro_InvokeRules_MatchPattern(const Span& sp, const ::std::vector<MacroRulesArm>& arms, TokenTree input, const AST::Crate& crate, AST::Module& mod,  ParameterMappings& bound_tts)
 {
-    TRACE_FUNCTION_F(rules.m_rules.size() << " options");
-    ASSERT_BUG(sp, rules.m_rules.size() > 0, "Empty macro_rules set");
+    TRACE_FUNCTION_F(arms.size() << " options");
+    if( arms.empty() )
+        ERROR(sp, E0000, "Macro has no arms for this kind of invocation");
 
     ::std::vector< ::std::pair<size_t, ::std::vector<bool>> >    matches;
     ::std::vector< std::pair<size_t, eTokenType> >  fail_pos;
-    for(size_t i = 0; i < rules.m_rules.size(); i ++)
+    for(size_t i = 0; i < arms.size(); i ++)
     {
         auto lex = TokenStreamRO(input);
-        auto arm_stream = MacroPatternStream(rules.m_rules[i].m_pattern);
+        auto arm_stream = MacroPatternStream(arms[i].m_pattern);
 
         bool fail = false;
         for(;;)
@@ -2200,7 +2209,7 @@ unsigned int Macro_InvokeRules_MatchPattern(const Span& sp, const MacroRules& ru
         auto lex = TTStreamO(sp, ParseState(), mv$(input));
         lex.parse_state().crate = &crate;
         SET_MODULE(lex, mod);
-        auto arm_stream = MacroPatternStream(rules.m_rules[i].m_pattern, &history);
+        auto arm_stream = MacroPatternStream(arms[i].m_pattern, &history);
 
         struct Capture {
             unsigned int    binding_idx;

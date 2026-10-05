@@ -460,7 +460,7 @@ void Module::add_macro_invocation(MacroInvocation item) {
 }
 void Module::add_macro(bool is_exported, RcString name, MacroRulesPtr macro) {
     assert(macro);
-    assert(macro->m_rules.size() > 0);
+    assert(!macro->is_empty());
     m_macros.push_back( Named<MacroRulesPtr>(
         Span(),
         {},
