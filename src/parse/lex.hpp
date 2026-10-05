@@ -44,6 +44,7 @@ class Lexer:
     bool    m_last_char_valid;
     Codepoint   m_last_char;
     ::std::vector<Token>    m_next_tokens;
+    bool    m_prev_dot = false;
 
     AST::Edition    m_edition;
     Ident::Hygiene m_hygiene;

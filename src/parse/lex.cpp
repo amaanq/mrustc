@@ -336,6 +336,7 @@ Token Lexer::realGetToken()
         case TOK_COMMENT: {
             continue; }
         default:
+            m_prev_dot = tok.type() == TOK_DOT;
             return tok;
         }
     }
@@ -1035,6 +1036,13 @@ double Lexer::parseFloat(U128 whole)
         }
         else {
             this->ungetc();
+
+            // Only a field access (`x.0.1`) splits into integers, elsewhere `1.36.0` is `1.36` `.` `0`
+            if( !m_prev_dot ) {
+                m_next_tokens.push_back(TOK_DOT);
+                m_next_tokens.push_back(Token::make_float(::std::strtod(sbuf.c_str(), NULL), CORETYPE_ANY));
+                return std::numeric_limits<double>::quiet_NaN();
+            }
 
             //buf[ofs] = '\0';
             //assert( buf[ofs-1] != '.' );    // Shouldn't be possible (as that would have been handled by the caller as `<int> '..'`
