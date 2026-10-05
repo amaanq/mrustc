@@ -7,6 +7,7 @@
  */
 #include "impl_ref.hpp"
 #include <hir/hir.hpp>
+#include <hir/visitor.hpp>
 #include "static.hpp"   // for monomorphise_type_with
 
 bool ImplRef::more_specific_than(const ImplRef& other) const
@@ -231,6 +232,31 @@ ImplRef::Monomorph ImplRef::get_cb_monomorph_traitimpl(const Span& sp, const ::H
     TU_MATCH_HDRA( (this->m_data), {)
     TU_ARMA(TraitImpl, e) {
         auto it = e.impl->m_types.find(name);
+        if( it == e.impl->m_types.end() && ::std::strncmp(name, ATY_PREFIX_ERASED, ::std::strlen(ATY_PREFIX_ERASED)) == 0 )
+        {
+            // `HIR_Expand_VTables` only adds these to impls after typecheck
+            ::std::string rest = name + ::std::strlen(ATY_PREFIX_ERASED);
+            auto sep = rest.rfind('_');
+            auto m_it = e.impl->m_methods.find( RcString::new_interned(rest.substr(0, sep)) );
+            if( sep != ::std::string::npos && m_it != e.impl->m_methods.end() )
+            {
+                struct V: public ::HIR::Visitor {
+                    ::std::vector<::HIR::TypeRef>   found;
+                    void visit_type(::HIR::TypeRef& ty) override {
+                        ::HIR::Visitor::visit_type(ty);
+                        if( const auto* et = ty.data().opt_ErasedType() ) {
+                            if( et->m_inner.is_Fcn() )
+                                found.push_back(ty.clone());
+                        }
+                    }
+                } v;
+                auto ret = m_it->second.data.m_return.clone();
+                v.visit_type(ret);
+                auto idx = ::std::stoul(rest.substr(sep + 1));
+                if( idx < v.found.size() )
+                    return this->get_cb_monomorph_traitimpl(sp, params).monomorph_type(sp, v.found[idx]);
+            }
+        }
         if( it == e.impl->m_types.end() )
         {
             static const HIR::TypeRef ty_self = ::HIR::TypeRef::new_self();
