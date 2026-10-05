@@ -1668,6 +1668,11 @@ namespace {
             DEBUG("state_type = " << state_type);
             cr_vars.set_state_type(state_type.clone());
 
+            {
+                ExprVisitor_Fixup   fixup { m_resolve.m_crate, &params, monomorph_cb, &m_out };
+                for(auto& ent : cr_vars.struct_ents)
+                    fixup.visit_type(ent.ent);
+            }
             auto gen_str = ::HIR::Struct {
                 params.clone(),
                 ::HIR::Struct::Repr::Rust,
@@ -1706,6 +1711,8 @@ namespace {
                 DEBUG("-- Fixing types in body code");
                 ExprVisitor_Fixup   fixup { m_resolve.m_crate, &params, monomorph_cb, &m_out };
                 fixup.visit_node_ptr( body_node );
+                for(auto& ty : cr_vars.new_locals)
+                    fixup.visit_type(ty);
             }
 
             // -- Prepare drop impl for later filling
@@ -1823,6 +1830,11 @@ namespace {
             // - This is because it needs to rewrite the flow quite severely.
             // > HOWEVER: The code is extracted here and passed over to the new impl
 
+            {
+                ExprVisitor_Fixup   fixup { m_resolve.m_crate, &params, monomorph_cb, &m_out };
+                for(auto& ent : cr_vars.struct_ents)
+                    fixup.visit_type(ent.ent);
+            }
             auto gen_str = ::HIR::Struct {
                 params.clone(),
                 ::HIR::Struct::Repr::Rust,
@@ -1864,6 +1876,8 @@ namespace {
                 DEBUG("-- Fixing types in body code");
                 ExprVisitor_Fixup   fixup { m_resolve.m_crate, &params, monomorph_cb, &m_out };
                 fixup.visit_node_ptr( body_node );
+                for(auto& ty : cr_vars.new_locals)
+                    fixup.visit_type(ty);
             }
 
             // -- Prepare drop impl for later filling
