@@ -117,6 +117,8 @@ else ifeq ($(RUSTC_VERSION),1.74.0)
   RUST_LIB_PREFIX := library/
 else ifeq ($(RUSTC_VERSION),1.90.0)
   RUST_LIB_PREFIX := library/
+else ifeq ($(RUSTC_VERSION),1.96.0)
+  RUST_LIB_PREFIX := library/
 else
   RUST_LIB_PREFIX := src/lib
 endif
@@ -143,12 +145,19 @@ ifeq ($(RUSTC_VERSION),1.90.0)
   SRCDIR_RUSTC := compiler/rustc
   SRCDIR_RUSTC_DRIVER := compiler/rustc_driver
 endif
+ifeq ($(RUSTC_VERSION),1.96.0)
+  SRCDIR_RUSTC := compiler/rustc
+  SRCDIR_RUSTC_DRIVER := compiler/rustc_driver
+endif
 
 SRCDIR_RUST_TESTS := $(RUSTCSRC)src/test/
 ifeq ($(RUSTC_VERSION),1.74.0)
 SRCDIR_RUST_TESTS := $(RUSTCSRC)tests/
 endif
 ifeq ($(RUSTC_VERSION),1.90.0)
+SRCDIR_RUST_TESTS := $(RUSTCSRC)tests/
+endif
+ifeq ($(RUSTC_VERSION),1.96.0)
 SRCDIR_RUST_TESTS := $(RUSTCSRC)tests/
 endif
 
