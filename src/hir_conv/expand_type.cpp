@@ -668,6 +668,12 @@ public:
         ::HIR::Visitor::visit_trait_impl(trait_path, impl);
         m_impl_type = nullptr;
     }
+    void visit_marker_impl(const ::HIR::SimplePath& trait_path, ::HIR::MarkerImpl& impl) override
+    {
+        m_impl_type = &impl.m_type;
+        ::HIR::Visitor::visit_marker_impl(trait_path, impl);
+        m_impl_type = nullptr;
+    }
 };
 
 void ConvertHIR_ExpandAliases(::HIR::Crate& crate)
