@@ -396,13 +396,8 @@ namespace static_borrow_constants {
             switch(v.tag())
             {
             case StaticTraitResolve::ValuePtr::TAG_Constant:
-                if( monomorphise_path_needed(node.m_path) ) {
-                    DEBUG("Constant path is still generic, can't transform into a `static`");
-                }
-                else {
-                    m_is_constant = !is_maybe_interior_mut(node);
-                    DEBUG(node.m_path << " m_is_constant=" << m_is_constant);
-                }
+                m_is_constant = !is_maybe_interior_mut(node);
+                DEBUG(node.m_path << " m_is_constant=" << m_is_constant);
                 break;
             case StaticTraitResolve::ValuePtr::TAG_Function:
                 m_is_constant = true;
