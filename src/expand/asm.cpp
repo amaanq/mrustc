@@ -268,7 +268,9 @@ public:
                 break;
             }
             GET_CHECK_TOK(tok, lex, TOK_COMMA);
-        } while( lex.lookahead(0) == TOK_STRING || lex.lookahead(0) == TOK_HASH );
+        } while( lex.lookahead(0) == TOK_STRING || lex.lookahead(0) == TOK_HASH
+            || lex.lookahead(0) == TOK_INTERPOLATED_EXPR
+            || (lex.lookahead(0) == TOK_IDENT && lex.lookahead(1) == TOK_EXCLAM) );
 
 
         std::vector<AST::ExprNode_Asm2::Param>  params;
