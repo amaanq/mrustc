@@ -795,9 +795,10 @@ struct CloneTyWith_Monomorph: Monomorphiser {
             return p->m_lifetimes[lft_ref.idx()];
         }
         else {
-            BUG(sp, "Higher-ranked lifetime parameters were not expected (got " << lft_ref << ")");
-            //DEBUG("No HRBs " << lft_ref);
-            //return HIR::LifetimeRef(lft_ref.binding);
+            // tracing-subscriber's `for<'w> MakeWriter<'w>` leaks a HRL into monomorphised paths, and
+            // codegen ignores lifetimes
+            DEBUG("No HRBs " << lft_ref);
+            return HIR::LifetimeRef(lft_ref.binding);
         }
         break;
     default:

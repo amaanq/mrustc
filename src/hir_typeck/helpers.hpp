@@ -286,10 +286,14 @@ public:
     friend ::std::ostream& operator<<(::std::ostream& os, const AutoderefBorrow& x);
     /// Locate the named method by applying auto-dereferencing.
     /// \return Number of times deref was applied (or ~0 if _ was hit)
+    /// - `pause_on_fuzzy` also returns ~0 when only inherent impls matched, and only because of ivars
     unsigned int autoderef_find_method(const Span& sp,
             const HIR::t_trait_list& traits, const ::std::vector<unsigned>& ivars, const ::HIR::TypeRef& top_ty, const RcString& method_name,
-            /* Out -> */::std::vector<::std::pair<AutoderefBorrow,::HIR::Path>>& possibilities
+            /* Out -> */::std::vector<::std::pair<AutoderefBorrow,::HIR::Path>>& possibilities,
+            bool pause_on_fuzzy=false
             ) const;
+    /// Set by `find_method` when an inherent impl only fuzzily matched the receiver
+    mutable bool m_inherent_was_fuzzy = false;
     /// Locate the named field by applying auto-dereferencing.
     /// \return Number of times deref was applied (or ~0 if _ was hit)
     unsigned int autoderef_find_field(const Span& sp, const ::HIR::TypeRef& top_ty, const RcString& name,  /* Out -> */::HIR::TypeRef& field_type) const;

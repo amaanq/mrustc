@@ -1946,6 +1946,11 @@ namespace typecheck
                 // - The function params are already mapped (from fix_param_count)
                 auto& impl_params = e.impl_params;
                 impl_params.m_lifetimes.resize( impl_ptr->m_params.m_lifetimes.size() );
+                // A concrete impl (`impl Map<String, Value>`) fixes the path's `Map<_, _>` (schemars' `.flat_map(Map::keys)`)
+                if( !impl_ptr->m_params.is_generic() )
+                {
+                    this->context.equate_types(sp, impl_ptr->m_type, e.type);
+                }
                 if( impl_ptr->m_params.is_generic() )
                 {
                     impl_params.m_types.resize( impl_ptr->m_params.m_types.size() );

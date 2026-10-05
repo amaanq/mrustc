@@ -1155,6 +1155,8 @@ bool StaticTraitResolve::find_impl__check_crate_raw(
         RcString    placeholder_name;
         HIR::PathParams&    placeholders;
         GetParams::ParamsSet&   placeholders_set;
+        /// The type being checked, which `Self` names in the impl's bounds
+        const ::HIR::TypeRef*   self_ty = nullptr;
         Matcher(
             Span sp,
             const HIR::PathParams& impl_params,
@@ -1284,6 +1286,10 @@ bool StaticTraitResolve::find_impl__check_crate_raw(
             //    DEBUG("[find_impl__check_crate_raw] Self - " << impl_type << " or " << des_type);
                 //TODO(sp, "[find_impl__check_crate_raw] Self - " << impl_type << " or " << des_type);
             //    return impl_type;
+                // rustc_data_structures' `unsafe impl DynSend for X where Self: Send`
+                if( self_ty ) {
+                    return self_ty->clone();
+                }
                 TODO(sp, "get_type Self");
             }
             ASSERT_BUG(sp, !ge.is_placeholder(), "[find_impl__check_crate_raw] Placeholder param seen - " << ge);
@@ -1316,6 +1322,7 @@ bool StaticTraitResolve::find_impl__check_crate_raw(
         }
     };
     Matcher matcher { sp, impl_params, params_set, placeholder_name, base_impl_placeholder_idx, placeholders, placeholders_set };
+    matcher.self_ty = &des_type;
 
     // Bounds
     for(const auto& bound : impl_params_def.m_bounds)
@@ -2055,6 +2062,7 @@ bool StaticTraitResolve::expand_associated_types__UfcsKnown(const Span& sp, ::HI
     //e2.trait = mv$(trait_path);
 
     bool replacement_happened = true;
+    bool deferred_unevaluated = false;
     ::ImplRef  best_impl;
     rv = this->find_impl(sp, trait_path.m_path, trait_path.m_params, e2.type, [&](ImplRef impl, bool fuzzy) {
         DEBUG("[expand_associated_types] Found " << impl);
@@ -2076,9 +2084,21 @@ bool StaticTraitResolve::expand_associated_types__UfcsKnown(const Span& sp, ::HI
             for(auto& ty : pp.m_types)
                 this->expand_associated_types(sp, ty);
             DEBUG("pp -> " << pp);
-            if( pp.compare_with_placeholders(sp, trait_path.m_params, cb_ident) == HIR::Compare::Unequal ) {
+            auto cmp = pp.compare_with_placeholders(sp, trait_path.m_params, cb_ident);
+            if( cmp == HIR::Compare::Unequal ) {
                 DEBUG("[expand_associated_types] - Fuzzy - params don't match: " << pp << " != " << trait_path.m_params);
                 return false;
+            }
+            // Const arguments not yet evaluated (zerocopy's `HasField<_, _, { ident_id!(1) }>`) can't pick
+            // between impls, so leave the type for after constant evaluation
+            if( cmp == HIR::Compare::Fuzzy ) {
+                auto is_uneval = [](const HIR::ConstGeneric& v) { return v.is_Unevaluated(); };
+                if( std::any_of(pp.m_values.begin(), pp.m_values.end(), is_uneval)
+                 || std::any_of(trait_path.m_params.m_values.begin(), trait_path.m_params.m_values.end(), is_uneval) ) {
+                    DEBUG("[expand_associated_types] - Fuzzy - unevaluated const arguments, defer");
+                    deferred_unevaluated = true;
+                    return false;
+                }
             }
             DEBUG("[expand_associated_types] - Fuzzy - Actually matches");
         }
@@ -2114,6 +2134,10 @@ bool StaticTraitResolve::expand_associated_types__UfcsKnown(const Span& sp, ::HI
         if( recurse )
             this->expand_associated_types(sp, input);
         return replacement_happened;
+    }
+    if( deferred_unevaluated ) {
+        DEBUG("- Left unexpanded until const arguments are evaluated");
+        return false;
     }
     if( best_impl.is_valid() ) {
         e.binding = ::HIR::TypePathBinding::make_Opaque({});

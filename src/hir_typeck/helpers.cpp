@@ -4711,7 +4711,8 @@ const ::HIR::TypeRef* TraitResolution::autoderef(const Span& sp, const ::HIR::Ty
 
 unsigned int TraitResolution::autoderef_find_method(const Span& sp,
         const HIR::t_trait_list& traits, const ::std::vector<unsigned>& ivars, const ::HIR::TypeRef& top_ty, const RcString& method_name,
-        /* Out -> */::std::vector<::std::pair<AutoderefBorrow,::HIR::Path>>& possibilities
+        /* Out -> */::std::vector<::std::pair<AutoderefBorrow,::HIR::Path>>& possibilities,
+        bool pause_on_fuzzy
         ) const
 {
     try {
@@ -4751,6 +4752,7 @@ unsigned int TraitResolution::autoderef_find_method(const Span& sp,
         }
         // TODO: Pause on Box<_>?
         DEBUG(deref_count << ": " << ty);
+        m_inherent_was_fuzzy = false;
 
         // Non-referenced
         if( this->find_method(sp, traits, ivars, ty, method_name,  cur_access, AutoderefBorrow::None, possibilities) )
@@ -4777,6 +4779,14 @@ unsigned int TraitResolution::autoderef_find_method(const Span& sp,
         if( !possibilities.empty() )
         {
             DEBUG("FOUND " << possibilities.size() << " options: " << possibilities);
+            // quote's `get_span(x).__into_span()` has `impl GetSpan<Span>` matching `GetSpan<_>` before `_` is known,
+            // where rustc would wait and find `GetSpanInner<DelimSpan>` after one deref
+            if( pause_on_fuzzy && m_inherent_was_fuzzy && std::all_of(possibilities.begin(), possibilities.end(), [](const auto& p){ return p.second.m_data.is_UfcsInherent(); }) )
+            {
+                DEBUG("- Only fuzzy inherent matches, pausing");
+                possibilities.clear();
+                return ~0u;
+            }
             return deref_count;
         }
 
@@ -4965,6 +4975,10 @@ bool TraitResolution::find_method(const Span& sp,
         }
         ::HIR::PathParams   impl_params;
         auto cmp = ftic_check_params(sp, ::HIR::SimplePath(), nullptr, self_ty, impl.m_params, {}, impl.m_type, impl_params);
+        // Only a concrete impl (`impl GetSpan<Span>`) can be wrong for the type `_` resolves to
+        if( cmp == HIR::Compare::Fuzzy && impl.m_params.m_types.empty() ) {
+            m_inherent_was_fuzzy = true;
+        }
         if( cmp != HIR::Compare::Unequal )
         {
             DEBUG("Found `impl" << impl.m_params.fmt_args() << " " << impl.m_type << "` fn " << method_name/* << " - " << top_ty*/);
