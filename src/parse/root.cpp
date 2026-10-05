@@ -1186,7 +1186,7 @@ AST::Attribute Parse_MetaItem(TokenStream& lex)
         while(
             lex.lookahead(0) != TOK_EOF
             && lex.lookahead(0) != TOK_SQUARE_CLOSE && lex.lookahead(0) != TOK_PAREN_CLOSE && lex.lookahead(0) != TOK_BRACE_CLOSE
-            && lex.lookahead(0) != TOK_COMMA && lex.lookahead(0) != TOK_SEMICOLON
+            && lex.lookahead(0) != TOK_COMMA && lex.lookahead(0) != TOK_SEMICOLON && lex.lookahead(0) != TOK_FATARROW
             )
         {
             tt.push_back(Parse_TT(lex, false));
