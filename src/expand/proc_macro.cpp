@@ -1505,21 +1505,27 @@ namespace {
             this->visit_vis(vis);
             m_pmi.send_rword("use");
 
-            if( item.entries.size() == 1 ) {
-                visit_path(item.entries[0].path);
-                if( item.entries[0].name == "" ) {
+            auto visit_entry = [&](const AST::UseItem::Ent& ent) {
+                visit_path(ent.path);
+                if( ent.name == "" ) {
                     m_pmi.send_symbol("::");
                     m_pmi.send_symbol("*");
                 }
-                else if( item.entries[0].name != item.entries[0].path.nodes().back().name() ) {
+                else if( ent.name != ent.path.nodes().back().name() ) {
                     m_pmi.send_rword("as");
-                    m_pmi.send_ident( item.entries[0].name.c_str() );
+                    m_pmi.send_ident( ent.name.c_str() );
                 }
-                else {
-                }
+            };
+            if( item.entries.size() == 1 ) {
+                visit_entry(item.entries[0]);
             }
             else {
-                TODO(sp, "Multiple items");
+                m_pmi.send_symbol("{");
+                for(const auto& ent : item.entries) {
+                    visit_entry(ent);
+                    m_pmi.send_symbol(",");
+                }
+                m_pmi.send_symbol("}");
             }
             m_pmi.send_symbol(";");
         }
@@ -1617,6 +1623,16 @@ namespace {
                     }
                 TU_ARMA(Static, e) {
                     visit_static(i.name.c_str(), i.vis, e);
+                    }
+                TU_ARMA(Type, e) {
+                    this->visit_vis(i.vis);
+                    m_pmi.send_rword("type");
+                    m_pmi.send_ident(i.name.c_str());
+                    this->visit_params(e.m_params);
+                    m_pmi.send_symbol("=");
+                    this->visit_type(e.m_type);
+                    this->visit_bounds(e.m_params);
+                    m_pmi.send_symbol(";");
                     }
                 }
             }
