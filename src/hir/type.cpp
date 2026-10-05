@@ -1066,7 +1066,7 @@ HIR::TrackHrbStack::PopOnDrop HIR::TrackHrbStack::push_hrb(const std::unique_ptr
         else if( const auto* xse = xe.size.opt_Unevaluated() )
         {
             // `te.size` must be known here, all we need to handle is `Infer`?
-            if( xse->is_Infer() ) {
+            if( xse->is_Infer() || xse->is_Unevaluated() ) {
                 rv &= Compare::Fuzzy;
             }
             else {
