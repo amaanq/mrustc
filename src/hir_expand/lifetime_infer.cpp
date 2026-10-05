@@ -2785,6 +2785,10 @@ namespace {
                 DEBUG("MIR present, skipping");
                 return ;
             }
+            if( root.m_state && root.m_state->stage >= ::HIR::ExprState::Stage::Lifetimes ) {
+                DEBUG("Lifetimes already inferred (constant evaluation), skipping");
+                return ;
+            }
             HIR_Expand_LifetimeInfer_ExprInner(m_resolve, args, ret_ty, root, m_remove_locals, !is_function);
         }
 
