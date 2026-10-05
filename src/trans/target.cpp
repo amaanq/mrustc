@@ -1796,7 +1796,7 @@ namespace {
                 else
                 {
                     rv.size = 0;
-                    rv.align = 0;
+                    rv.align = 1;
                 }
                 // Just leave it as None
                 //rv.variants = TypeRepr::VariantMode::make_None({});
