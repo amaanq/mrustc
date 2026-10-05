@@ -5715,6 +5715,15 @@ namespace {
                         case 'e':
                             m_of << 'k';    // x86: `k` selects eax instead of rax
                             break;
+                        case 'x':
+                            m_of << 'w';    // x86: `w` selects ax
+                            break;
+                        case 'l':
+                            m_of << 'b';    // x86: `b` selects al
+                            break;
+                        case 'h':
+                            m_of << 'h';    // x86: `h` selects ah
+                            break;
                         default:
                             MIR_TODO(mir_res, "Asm2 GCC: modifier " << f.modifier << " - " << stmt);
                         }
