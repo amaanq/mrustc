@@ -2271,31 +2271,10 @@ namespace {
                 if( ae->first == be->first )
                     return true;
 
-                //auto check_ends = []( const PatternRule::Data_ValueRange& lo, const PatternRule::Data_ValueRange& hi)->bool {
-                //    return lo.is_inclusive == hi.is_inclusive ? lo.last <= hi.last
-                //        : (lo.is_inclusive
-                //            ? lo.last < hi.last // Lower side is inclusive, higher side exlusive - must be less than higher side
-                //            : throw "TODO" // Lower side is excl, higher side incl - lower+1 < higher = lower < higher-1 = lower
-                //            );
-                //    };
-                ASSERT_BUG(Span(), ae->is_inclusive && be->is_inclusive, "TODO: Handle overlap with exclusive ranges: "
-                    << ae->first << ".." << (ae->is_inclusive ? "=" : "") << ae->last
-                    << " and "
-                    << be->first << ".." << (be->is_inclusive ? "=" : "") << be->last
-                    );
-                assert(ae->is_inclusive && "TODO: Exclusive ranges");
-                assert(be->is_inclusive && "TODO: Exclusive ranges");
-                // Start of B within A
-                if( ae->first <= be->first && is_within_right(be->first, *ae) )
-                    return true;
-                // End of B within A
-                if( is_within_right(ae->first, *be) && be->last <= ae->last ) // TODO: Right-exclusive (if equal type then original check, otherwise complex)
-                    return true;
-                // Start of A within B
+                // Both starts are inclusive, so two ranges overlap exactly when either start lies in the other
                 if( be->first <= ae->first && is_within_right(ae->first, *be) )
                     return true;
-                // End of A within B
-                if( is_within_right(be->first, *ae) && ae->last <= be->last ) // TODO: Right-exclusive
+                if( ae->first <= be->first && is_within_right(be->first, *ae) )
                     return true;
 
                 // Disjoint

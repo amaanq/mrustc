@@ -105,6 +105,7 @@ namespace {
             rv = ::MIR::LValue::new_Field(mv$(rv), 0);   // .state
             rv = ::MIR::LValue::new_Downcast(mv$(rv), 1);   // .value (From MaybeUninit)
             rv = ::MIR::LValue::new_Field(mv$(rv), 0);   // .value (From ManuallyDrop)
+            if( TARGETVER_LEAST_1_96 ) rv = ::MIR::LValue::new_Field(mv$(rv), 0);   // .0 (From MaybeDangling, 1.96)
             rv = ::MIR::LValue::new_Field(mv$(rv), 0);   // .idx
             return rv;
         }
@@ -171,6 +172,7 @@ namespace {
                 slot.m_wrappers.push_back(::MIR::LValue::Wrapper::new_Field(0));    // Get state field
                 slot.m_wrappers.push_back(::MIR::LValue::Wrapper::new_Downcast(1));   // .value (From MaybeUninit)
                 slot.m_wrappers.push_back(::MIR::LValue::Wrapper::new_Field(0));   // .value (From ManuallyDrop)
+                if( TARGETVER_LEAST_1_96 ) slot.m_wrappers.push_back(::MIR::LValue::Wrapper::new_Field(0));   // .0 (From MaybeDangling, 1.96)
                 slot.m_wrappers.push_back(::MIR::LValue::Wrapper::new_Field(drop_state_field_idx));    // drop flag bitset
                 for(const auto& flag_mapping : drop_flag_mapping) {
                     auto i = out_builder.new_drop_flag(false);
@@ -229,6 +231,7 @@ namespace {
             stmt_idx_lv = ::MIR::LValue::new_Field(mv$(stmt_idx_lv), 0);   // .state
             stmt_idx_lv = ::MIR::LValue::new_Downcast(mv$(stmt_idx_lv), 1);   // .value (From MaybeUninit)
             stmt_idx_lv = ::MIR::LValue::new_Field(mv$(stmt_idx_lv), 0);   // .value (From ManuallyDrop)
+            if( TARGETVER_LEAST_1_96 ) stmt_idx_lv = ::MIR::LValue::new_Field(mv$(stmt_idx_lv), 0);   // .0 (From MaybeDangling, 1.96)
             stmt_idx_lv = ::MIR::LValue::new_Field(mv$(stmt_idx_lv), 0);   // .idx
             out_builder.end_block( ::MIR::Terminator::make_Switch({ mv$(stmt_idx_lv), mv$(arms) }) );
         }
@@ -2370,6 +2373,31 @@ namespace {
                         m_builder.set_result(node.span(), std::move(res));
                         return ;
                     }
+                    // 1.96 `vec!`: `write_box_via_move(b, x)` stores `x` into `*b` (a `Box<MaybeUninit<T>>`) and returns `b`
+                    if( name == "write_box_via_move" ) {
+                        auto& v_box = values.at(0);
+                        auto& v_val = values.at(1);
+                        ASSERT_BUG(node.span(), v_box.is_LValue(), "write_box_via_move: box argument not an lvalue");
+                        auto slot = ::MIR::LValue::new_Deref(v_box.as_LValue().clone());
+                        slot = ::MIR::LValue::new_Downcast(mv$(slot), 1);   // MaybeUninit.value
+                        slot = ::MIR::LValue::new_Field(mv$(slot), 0);   // ManuallyDrop.value
+                        slot = ::MIR::LValue::new_Field(mv$(slot), 0);   // MaybeDangling.0
+                        // The box is uninitialised, so the write must not drop its old contents
+                        TU_MATCH_HDRA( (v_val), {)
+                        TU_ARMA(LValue, lv) {
+                            m_builder.push_stmt_assign(node.span(), mv$(slot), ::MIR::RValue::make_Use(mv$(lv)), /*update_dest_state=*/false);
+                            }
+                        TU_ARMA(Constant, c) {
+                            m_builder.push_stmt_assign(node.span(), mv$(slot), ::MIR::RValue::make_Constant(mv$(c)), /*update_dest_state=*/false);
+                            }
+                        TU_ARMA(Borrow, b) {
+                            m_builder.push_stmt_assign(node.span(), mv$(slot), ::MIR::RValue::make_Borrow({ b.type, false, mv$(b.val) }), /*update_dest_state=*/false);
+                            }
+                        }
+                        m_builder.push_stmt_assign(node.span(), res.clone(), ::MIR::RValue::make_Use(mv$(v_box.as_LValue())));
+                        m_builder.set_result(node.span(), std::move(res));
+                        return ;
+                    }
                     // aggregate_raw_ptr: Lowers to mrustc's MakeDst (rustc's `Aggregate` with `AggregateKind::RawPtr`)
                     if( name == "aggregate_raw_ptr" ) {
                         auto& v_ptr = values.at(0);
@@ -3178,12 +3206,14 @@ namespace {
                     ASSERT_BUG(sp, idx < fcn.locals.size(), idx << " >= " << fcn.locals.size());
                     fields.push_back(::HIR::VisEnt<HIR::TypeRef> { HIR::Publicity::new_none(), fcn.locals.at(idx).clone() });
                     // self.state(0).value(?#1).value(?0).IDX
-                    mappings.insert(std::make_pair( idx, std::vector<MIR::LValue::Wrapper> {
+                    std::vector<MIR::LValue::Wrapper> wrappers {
                         ::MIR::LValue::Wrapper::new_Field(0),
                         ::MIR::LValue::Wrapper::new_Downcast(value_var_idx),    // MaybeUninit.value
                         ::MIR::LValue::Wrapper::new_Field(0),   // ManuallyDrop.value
-                        ::MIR::LValue::Wrapper::new_Field(field_idx)
-                        } ));
+                        };
+                    if( TARGETVER_LEAST_1_96 ) wrappers.push_back(::MIR::LValue::Wrapper::new_Field(0));   // .0 (From MaybeDangling, 1.96)
+                    wrappers.push_back(::MIR::LValue::Wrapper::new_Field(field_idx));
+                    mappings.insert(std::make_pair( idx, std::move(wrappers) ));
                 }
             }
             for(const auto& m : mappings) {
@@ -3269,6 +3299,7 @@ namespace {
                         slot.m_wrappers.push_back(::MIR::LValue::Wrapper::new_Field(0));    // .0
                         slot.m_wrappers.push_back(::MIR::LValue::Wrapper::new_Downcast(1));   // .value (From MaybeUninit)
                         slot.m_wrappers.push_back(::MIR::LValue::Wrapper::new_Field(0));   // .value (From ManuallyDrop)
+                        if( TARGETVER_LEAST_1_96 ) slot.m_wrappers.push_back(::MIR::LValue::Wrapper::new_Field(0));   // .0 (From MaybeDangling, 1.96)
                         slot.m_wrappers.push_back(::MIR::LValue::Wrapper::new_Field(m_drop_flags_field));   // .drop_flags
                         return slot;
                     };
