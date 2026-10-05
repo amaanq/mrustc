@@ -2124,7 +2124,7 @@ namespace {
 }
 
 template<typename T>
-static void derive_item(const Span& sp, const AST::Crate& crate, AST::Module& mod, const AST::Attribute& attr, const AST::AbsolutePath& path, slice<const AST::Attribute> attrs, const AST::Visibility& vis, const T& item)
+static void derive_item(const Span& sp, const AST::Crate& crate, AST::Module& mod, const AST::Attribute& attr, const AST::AbsolutePath& path, slice<const AST::Attribute> attrs, const AST::Visibility& vis, const T& item, bool is_const)
 {
     auto derive_items = get_derive_items(attr);
     if( derive_items.empty() ) {
@@ -2149,7 +2149,13 @@ static void derive_item(const Span& sp, const AST::Crate& crate, AST::Module& mo
         {
             auto dp = find_impl(trait_path.as_trivial());
             if( dp ) {
-                mod.add_item(sp, AST::Visibility::make_bare_private(), "", dp->handle_item(sp, opts, item.params(), type, item), {} );
+                auto impl = dp->handle_item(sp, opts, item.params(), type, item);
+                if( is_const ) {
+                    for(auto& ii : impl.items())
+                        if( ii.data && ii.data->is_Function() )
+                            ii.data->as_Function().set_const();
+                }
+                mod.add_item(sp, AST::Visibility::make_bare_private(), "", mv$(impl), {} );
                 continue ;
             }
         }
@@ -2208,7 +2214,9 @@ static void derive_item(const Span& sp, const AST::Crate& crate, AST::Module& mo
 class Decorator_Derive:
     public ExpandDecorator
 {
+    bool m_is_const;
 public:
+    Decorator_Derive(bool is_const = false): m_is_const(is_const) {}
     AttrStage stage() const override { return AttrStage::Pre; }
     void handle(const Span& sp, const AST::Attribute& attr, ::AST::Crate& crate, const AST::AbsolutePath& path, AST::Module& mod, size_t, slice<const AST::Attribute> attrs, const AST::Visibility& vis, AST::Item& i) const override
     {
@@ -2220,20 +2228,22 @@ public:
             // Ignore, it's been deleted
             ),
         (Union,
-            derive_item(sp, crate, mod, attr, path, attrs, vis, e);
+            derive_item(sp, crate, mod, attr, path, attrs, vis, e, m_is_const);
             ),
         (Enum,
-            derive_item(sp, crate, mod, attr, path, attrs, vis, e);
+            derive_item(sp, crate, mod, attr, path, attrs, vis, e, m_is_const);
             ),
         (Struct,
-            derive_item(sp, crate, mod, attr, path, attrs, vis, e);
+            derive_item(sp, crate, mod, attr, path, attrs, vis, e, m_is_const);
             )
         )
     }
 };
 
 STATIC_DECORATOR("derive", Decorator_Derive)
-// TODO: `derive_const` should generate const impls, but mrustc doesn't care
-class Decorator_DeriveConst: public Decorator_Derive {};
+class Decorator_DeriveConst: public Decorator_Derive {
+public:
+    Decorator_DeriveConst(): Decorator_Derive(true) {}
+};
 STATIC_DECORATOR("derive_const", Decorator_DeriveConst)
 
