@@ -362,6 +362,8 @@ namespace {
         const Monomorphiser&    m_monomorphiser;
         const OutState* m_out;
         bool    m_run_eat;
+        const ::HIR::ExprNode_Closure*  m_self_node = nullptr;
+        const ::HIR::TypeRef*   m_self_type = nullptr;
     public:
         ExprVisitor_Fixup(const ::HIR::Crate& crate, const ::HIR::GenericParams* params, const Monomorphiser& monomorphiser, const OutState* out):
             m_crate(crate),
@@ -480,12 +482,16 @@ namespace {
         {
             struct M: MonomorphiserNop {
                 const Monomorphiser&    monomorphiser;
-                M(const Monomorphiser& monomorphiser): monomorphiser(monomorphiser) {}
+                const ExprVisitor_Fixup&    fixup;
+                M(const Monomorphiser& monomorphiser, const ExprVisitor_Fixup& fixup): monomorphiser(monomorphiser), fixup(fixup) {}
                 ::HIR::TypeRef monomorph_type(const Span& sp, const ::HIR::TypeRef& ty, bool allow_infer) const override {
                     if( const auto* e = ty.data().opt_NodeType() )
                     {
                         TU_MATCH_HDRA((*e), {)
                         TU_ARMA(Closure, node_p) {
+                            if( node_p == fixup.m_self_node ) {
+                                return fixup.m_self_type->clone();
+                            }
                             DEBUG("Closure: " << node_p->m_obj_path_base); // TODO: Why does this use the `_base`
                             auto path = monomorphiser.monomorph_genericpath(sp, node_p->m_obj_path_base, false);
                             const auto& str = *node_p->m_obj_ptr;
@@ -519,7 +525,7 @@ namespace {
                     }
                     return rv;
                 }
-            } m(m_monomorphiser);
+            } m(m_monomorphiser, *this);
             ty = m.monomorph_type(Span(), ty, true);
         }
     };
@@ -1228,6 +1234,8 @@ namespace {
             {
                 DEBUG("-- Fixing types in body code");
                 ExprVisitor_Fixup   fixup { m_resolve.m_crate, &params, monomorph_cb, &m_out };
+                fixup.m_self_node = &node;
+                fixup.m_self_type = &closure_type;
                 fixup.visit_root( body_code );
 
                 DEBUG("-- Fixing types in signature");
