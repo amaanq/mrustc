@@ -2068,6 +2068,47 @@ bool TraitResolution::find_trait_impls(const Span& sp,
                 });
             if( rv )
                 return true;
+
+            const auto* inner_te = pe.type.data().opt_Path();
+            if( inner_te && inner_te->binding.is_Opaque() && inner_te->path.m_data.is_UfcsKnown() )
+            {
+                const auto& inner_pe = inner_te->path.m_data.as_UfcsKnown();
+                auto inner_ms = MonomorphStatePtr(&inner_pe.type, &inner_pe.trait.m_params, &inner_pe.params);
+                auto check_aty_traits = [&](const HIR::TraitPath& tp)->bool {
+                    if( tp.m_path.m_path != pe.trait.m_path )
+                        return false;
+                    if( this->compare_pp(sp, tp.m_path.m_params, pe.trait.m_params) == ::HIR::Compare::Unequal )
+                        return false;
+                    auto it = tp.m_trait_bounds.find(pe.item);
+                    if( it == tp.m_trait_bounds.end() )
+                        return false;
+                    for(const auto& t : it->second.traits)
+                    {
+                        if( t.m_path.m_path == trait )
+                        {
+                            auto cmp = this->compare_pp(sp, t.m_path.m_params, params);
+                            if( cmp != ::HIR::Compare::Unequal && callback(ImplRef(type.clone(), t.m_path.m_params.clone(), {}), cmp) )
+                                return true;
+                        }
+                        bool found = this->find_named_trait_in_trait(sp, trait, params, *t.m_trait_ptr, t.m_path.m_path, t.m_path.m_params, type,
+                            [&](const HIR::TraitPath& i_tp) {
+                                auto cmp = this->compare_pp(sp, i_tp.m_path.m_params, params);
+                                return cmp != ::HIR::Compare::Unequal && callback(ImplRef(type.clone(), i_tp.m_path.m_params.clone(), {}), cmp);
+                            });
+                        if( found )
+                            return true;
+                    }
+                    return false;
+                };
+                rv = this->iterate_aty_bounds(sp, inner_pe, [&](const HIR::TraitPath& inner_bound) {
+                    auto bound_mono = inner_ms.monomorph_traitpath(sp, inner_bound, false);
+                    if( check_aty_traits(bound_mono) )
+                        return true;
+                    return this->find_named_trait_in_trait(sp, pe.trait.m_path, pe.trait.m_params, *bound_mono.m_trait_ptr, bound_mono.m_path.m_path, bound_mono.m_path.m_params, pe.type, check_aty_traits);
+                    });
+                if( rv )
+                    return true;
+            }
         }
         } // TU_ARMA(Path)
     } // TU_MATCH_HDRA

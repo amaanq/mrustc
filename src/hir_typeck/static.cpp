@@ -915,6 +915,50 @@ bool StaticTraitResolve::find_impl__bounds(
                 }
             }
         }
+
+        const auto* inner_te = assoc_info->type.data().opt_Path();
+        if( inner_te && inner_te->path.m_data.is_UfcsKnown() )
+        {
+            const auto& inner_pe = inner_te->path.m_data.as_UfcsKnown();
+            auto inner_ms = MonomorphStatePtr(&inner_pe.type, &inner_pe.trait.m_params, &inner_pe.params);
+            static const HIR::PathParams no_params;
+            auto check_aty_traits = [&](const HIR::TraitPath& tp)->bool {
+                if( tp.m_path.m_path != assoc_info->trait.m_path || !H::compare_pp(sp, tp.m_path.m_params, assoc_info->trait.m_params) )
+                    return false;
+                auto it = tp.m_trait_bounds.find(assoc_info->item);
+                if( it == tp.m_trait_bounds.end() )
+                    return false;
+                for(const auto& t : it->second.traits)
+                {
+                    if( t.m_path.m_path == trait_path && (!trait_params || H::compare_pp(sp, t.m_path.m_params, *trait_params)) )
+                    {
+                        if( found_cb(ImplRef(type.clone(), t.m_path.m_params.clone(), {}), false) )
+                            return true;
+                    }
+                    bool found = this->find_named_trait_in_trait(sp, trait_path, trait_params ? *trait_params : no_params, *t.m_trait_ptr, t.m_path.m_path, t.m_path.m_params, type,
+                        [&](const HIR::PathParams& pp, HIR::TraitPath::assoc_list_t assoc) {
+                            return found_cb(ImplRef(type.clone(), pp.clone(), std::move(assoc)), false);
+                        });
+                    if( found )
+                        return true;
+                }
+                return false;
+            };
+            bool found = this->iterate_aty_bounds(sp, inner_pe, [&](const HIR::TraitPath& inner_bound) {
+                auto bound_mono = inner_ms.monomorph_traitpath(sp, inner_bound, false);
+                if( check_aty_traits(bound_mono) )
+                    return true;
+                auto parent_ms = MonomorphStatePtr(&assoc_info->type, &bound_mono.m_path.m_params, nullptr);
+                for(const auto& pt : bound_mono.m_trait_ptr->m_all_parent_traits)
+                {
+                    if( pt.m_path.m_path == assoc_info->trait.m_path && check_aty_traits(parent_ms.monomorph_traitpath(sp, pt, false)) )
+                        return true;
+                }
+                return false;
+                });
+            if( found )
+                return true;
+        }
     }
 
     return false;
