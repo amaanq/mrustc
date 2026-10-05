@@ -711,6 +711,13 @@ namespace {
 
             m_current_trait = nullptr;
         }
+        void visit_trait_alias(::HIR::ItemPath p, ::HIR::TraitAlias& item) override
+        {
+            auto self = ::HIR::TypeRef::new_self();
+            m_self_types.push_back(&self);
+            ::HIR::Visitor::visit_trait_alias(p, item);
+            m_self_types.pop_back();
+        }
         void visit_struct(::HIR::ItemPath p, ::HIR::Struct& item) override
         {
             auto _ = m_resolve.set_impl_generics(item.m_struct_markings.dst_type, item.m_params);
