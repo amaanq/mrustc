@@ -277,14 +277,17 @@ ImplRef::Monomorph ImplRef::get_cb_monomorph_traitimpl(const Span& sp, const ::H
         auto it = e.assoc->find(name);
         if(it == e.assoc->end())
             return ::HIR::TypeRef();
-        ASSERT_BUG(Span(), !params.has_params(), "TODO: BoundedPtr ATY with params?");
+        // A bound like `ArrayType<T> = [T; N]` only fixes the type for those arguments
+        if( params != it->second.aty_params )
+            return ::HIR::TypeRef();
         return MonomorphHrlsOnly(e.hrls).monomorph_type(sp, it->second.type, true);
         }
     TU_ARMA(Bounded, e) {
         auto it = e.assoc.find(name);
         if(it == e.assoc.end())
             return ::HIR::TypeRef();
-        ASSERT_BUG(Span(), !params.has_params(), "TODO: Bounded ATY with params?");
+        if( params != it->second.aty_params )
+            return ::HIR::TypeRef();
         return MonomorphHrlsOnly(e.hrls).monomorph_type(sp, it->second.type, true);
         }
     }

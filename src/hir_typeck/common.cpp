@@ -509,7 +509,7 @@ bool monomorphise_type_needed(const ::HIR::TypeRef& tpl, bool ignore_lifetimes/*
             ));
     }
     for(const auto& assoc : tpl.m_trait_bounds) {
-        auto v = HIR::TraitPath::AtyBound { this->monomorph_genericpath(sp, assoc.second.source_trait, allow_infer, false), {} };
+        auto v = HIR::TraitPath::AtyBound { this->monomorph_genericpath(sp, assoc.second.source_trait, allow_infer, false), this->monomorph_path_params(sp, assoc.second.aty_params, allow_infer) };
         for(const auto& trait : assoc.second.traits)
             v.traits.push_back( monomorph_traitpath(sp, trait, allow_infer, false) );
         rv.m_trait_bounds.insert(::std::make_pair( assoc.first, std::move(v) ));
@@ -521,7 +521,7 @@ bool monomorphise_type_needed(const ::HIR::TypeRef& tpl, bool ignore_lifetimes/*
 {
     return HIR::TraitPath::AtyEqual {
         this->monomorph_genericpath(sp, tpl.source_trait, allow_infer, false),
-        {},
+        this->monomorph_path_params(sp, tpl.aty_params, allow_infer),
         this->monomorph_type(sp, tpl.type, allow_infer)
         };
 }

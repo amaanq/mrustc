@@ -3164,7 +3164,7 @@ bool TraitResolution::find_trait_impls_bound(const Span& sp, const ::HIR::Simple
             {
                 if( bound.m_path.m_path == trait )
                 {
-                    auto monomorph_cb = MonomorphStatePtr(&assoc_info->type, &assoc_info->trait.m_params, nullptr);
+                    auto monomorph_cb = MonomorphStatePtr(&assoc_info->type, &assoc_info->trait.m_params, &assoc_info->params);
 
                     DEBUG("- Found an associated type bound for this trait via another bound");
                     ::HIR::Compare  ord = outer_ord;

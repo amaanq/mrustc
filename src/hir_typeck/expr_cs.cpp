@@ -5597,7 +5597,7 @@ namespace {
                 DEBUG("[check_associated] Found cmp=" << cmp << " " << impl);
                 if( v.name != "" ) {
                     // TODO: Are params needed for these ATY bounds?
-                    auto out_ty_o = impl.get_type(v.name.c_str(), {});
+                    auto out_ty_o = impl.get_type(v.name.c_str(), v.aty_pp);
                     if( out_ty_o == ::HIR::TypeRef() )
                     {
                         out_ty_o = ::HIR::TypeRef::new_path(::HIR::Path( v.impl_ty.clone(), ::HIR::GenericPath(v.trait, v.params.clone()), v.name, v.aty_pp.clone() ), {});
@@ -5695,8 +5695,8 @@ namespace {
                             // Edge case: Might be just outright identical
                             if( possible_impl.impl_ty == impl_ty && possible_impl.params == impl_params )
                             {
-                                auto t1 = v.name == "" ? HIR::TypeRef() : possible_impl.impl_ref.get_type(v.name.c_str(), {});
-                                auto t2 = v.name == "" ? HIR::TypeRef() : impl.get_type(v.name.c_str(), {});
+                                auto t1 = v.name == "" ? HIR::TypeRef() : possible_impl.impl_ref.get_type(v.name.c_str(), v.aty_pp);
+                                auto t2 = v.name == "" ? HIR::TypeRef() : impl.get_type(v.name.c_str(), v.aty_pp);
                                 if(v.name == "" || t1 == t2 || t2 == HIR::TypeRef())
                                 {
                                     DEBUG("[check_associated] HACK: Same type and params, and ATY matches or this impl doesn't have it");
@@ -5718,7 +5718,7 @@ namespace {
                                 else
                                 {
                                     DEBUG("[check_associated] HACK: Same type and params, but ATY mismatch - "
-                                        << possible_impl.impl_ref.get_type(v.name.c_str(), {}) << " != " << impl.get_type(v.name.c_str(), {}));
+                                        << possible_impl.impl_ref.get_type(v.name.c_str(), v.aty_pp) << " != " << impl.get_type(v.name.c_str(), v.aty_pp));
                                 }
                             }
                         }

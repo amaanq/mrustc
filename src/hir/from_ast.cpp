@@ -836,11 +836,7 @@ namespace {
         }
         static std::pair<RcString,HIR::PathParams> get_aty_node(const Span& sp, const ::AST::PathNode& pn)
         {
-            auto args = LowerHIR_PathParams(sp, pn.args(), false);
-            if( args.has_params() ) {
-                TODO(sp, "Handle ATYs with args");
-            }
-            return std::make_pair(pn.name(), std::move(args));
+            return std::make_pair(pn.name(), LowerHIR_PathParams(sp, pn.args(), false));
         }
     };
 
