@@ -8,6 +8,7 @@
 #include <ast/crate.hpp>
 #include <ast/ast.hpp>
 #include <ast/expr.hpp>
+#include <parse/lex.hpp>
 #include <main_bindings.hpp>
 #include <hir/hir.hpp>  // ABI_RUST - TODO: Move elsewhere?
 #include <fstream>
@@ -653,7 +654,7 @@ public:
             , AST::ExprNode_Cast, AST::ExprNode_BinOp, AST::ExprNode_Assign
             , AST::ExprNode_Match, AST::ExprNode_If, AST::ExprNode_Match
             );
-        m_os << "." << n.m_name;
+        m_os << "." << (Lex_IdentNeedsRaw(n.m_name.c_str()) ? "r#" : "") << n.m_name;
     }
     virtual void visit(AST::ExprNode_Index& n) override {
         m_expr_root = false;

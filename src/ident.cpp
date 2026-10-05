@@ -9,6 +9,7 @@
 #include <ident.hpp>
 #include <debug.hpp>
 #include <common.hpp>   // vector print
+#include <parse/lex.hpp>
 
 unsigned int Ident::Hygiene::g_next_scope = 0;
 
@@ -29,6 +30,8 @@ bool Ident::Hygiene::is_visible(const Hygiene& src) const
 }
 
 ::std::ostream& operator<<(::std::ostream& os, const Ident& x) {
+    if( Lex_IdentNeedsRaw(x.name.c_str()) )
+        os << "r#";
     os << x.name << x.hygiene;
     return os;
 }

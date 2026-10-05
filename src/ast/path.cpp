@@ -10,6 +10,7 @@
 #include "types.hpp"
 #include <iostream>
 #include "../parse/parseerror.hpp"
+#include "../parse/lex.hpp"
 #include <algorithm>
 #include "expr.hpp"
 
@@ -241,6 +242,8 @@ Ordering PathNode::ord(const PathNode& x) const
 }
 void PathNode::print_pretty(::std::ostream& os, bool is_type_context) const
 {
+    if( Lex_IdentNeedsRaw(m_name.c_str()) )
+        os << "r#";
     os << m_name;
     if( ! m_params.is_empty() )
     {

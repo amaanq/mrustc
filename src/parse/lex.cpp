@@ -1380,6 +1380,12 @@ Token Lex_FindOperator(const ::std::string& s)
     }
     return TOK_NULL;
 }
+bool Lex_IdentNeedsRaw(const ::std::string& s)
+{
+    if( s == "self" || s == "super" || s == "crate" )
+        return false;
+    return Lex_FindReservedWord(s, AST::Edition::Rust2021) != TOK_NULL;
+}
 Token Lex_FindReservedWord(const ::std::string& s, AST::Edition edition)
 {
     size_t len = 0;
