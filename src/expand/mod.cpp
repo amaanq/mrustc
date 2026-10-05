@@ -1179,7 +1179,28 @@ struct CExpandExpr:
                 void visit(::AST::ExprNode_Flow& v) override { invalid(v); }
                 void visit(::AST::ExprNode_LetBinding& v) override { invalid(v); }
                 void visit(::AST::ExprNode_Assign& v) override { invalid(v); }
-                void visit(::AST::ExprNode_CallPath  & v) override { invalid(v); }
+                void visit(::AST::ExprNode_CallPath  & v) override {
+                    bool is_split = false;
+                    std::vector<AST::Pattern>   subpats_start;
+                    std::vector<AST::Pattern>   subpats;
+                    for(auto& m : v.m_args) {
+                        if( const auto* e = dynamic_cast<AST::ExprNode_BinOp*>(m.get()) ) {
+                            if( e->m_type == ::AST::ExprNode_BinOp::RANGE && !e->m_left && !e->m_right ) {
+                                ASSERT_BUG(v.span(), !is_split, "Multiple `..` in tuple struct pattern?");
+                                is_split = true;
+                                subpats_start = std::move(subpats);
+                                continue ;
+                            }
+                        }
+                        subpats.push_back(lower(m));
+                    }
+                    if( is_split ) {
+                        pat(AST::Pattern(AST::Pattern::TagNamedTuple(), v.span(), v.m_path, AST::Pattern::TuplePat { std::move(subpats_start), true, std::move(subpats) }));
+                    }
+                    else {
+                        pat(AST::Pattern(AST::Pattern::TagNamedTuple(), v.span(), v.m_path, std::move(subpats)));
+                    }
+                }
                 void visit(::AST::ExprNode_CallMethod& v) override { invalid(v); }
                 void visit(::AST::ExprNode_CallObject& v) override { invalid(v); }
                 void visit(::AST::ExprNode_Loop& v) override { invalid(v); }
