@@ -86,6 +86,57 @@
  #[cfg(all(target_pointer_width = "64", any(target_arch = "aarch64", target_arch = "x86_64")))]
  rustc_data_structures::static_assert_size!(Parser<'_>, 288);
  
+--- compiler/rustc_query_impl/src/plumbing.rs
++++ compiler/rustc_query_impl/src/plumbing.rs
+@@ -76,9 +76,13 @@
+ }
+ 
+ pub(crate) fn encode_query_values<'tcx>(tcx: TyCtxt<'tcx>, encoder: &mut CacheEncoder<'_, 'tcx>) {
++    #[cfg(not(rust_compiler = "mrustc"))]
+     for_each_query_vtable!(CACHE_ON_DISK, tcx, |query| {
+         encode_query_values_inner(tcx, query, encoder)
+     });
++    // mrustc expands `Erased<V>` before this crate sees it, so `V` can't be inferred from `C::Value`
++    #[cfg(rust_compiler = "mrustc")]
++    for_each_query_vtable!(CACHE_ON_DISK_VALUE, tcx, encode_query_values_inner, encoder);
+ }
+ 
+ fn encode_query_values_inner<'a, 'tcx, C, V>(
+--- compiler/rustc_query_impl/src/query_impl.rs
++++ compiler/rustc_query_impl/src/query_impl.rs
+@@ -187,12 +187,12 @@
+                         hash_value_fn: None,
+                         #[cfg(not($no_hash))]
+                         hash_value_fn: Some(|hcx, erased_value: &erase::Erased<Value<'tcx>>| {
+-                            let value = erase::restore_val(*erased_value);
++                            let value = erase::restore_val::<Value<'tcx>>(*erased_value);
+                             rustc_middle::dep_graph::hash_result(hcx, &value)
+                         }),
+ 
+                         format_value: |erased_value: &erase::Erased<Value<'tcx>>| {
+-                            format!("{:?}", erase::restore_val(*erased_value))
++                            format!("{:?}", erase::restore_val::<Value<'tcx>>(*erased_value))
+                         },
+                         create_tagged_key: TaggedQueryKey::$name,
+                         execute_query_fn: if incremental {
+@@ -252,6 +252,17 @@
+                 )*
+             }};
+ 
++            (CACHE_ON_DISK_VALUE, $tcx:expr, $f:ident, $encoder:expr) => {{
++                let tcx: rustc_middle::ty::TyCtxt<'_> = $tcx;
++                $(
++                    #[cfg($cache_on_disk)]
++                    {
++                        let query = &tcx.query_system.query_vtables.$name;
++                        $f::<_, rustc_middle::queries::$name::Value<'_>>(tcx, query, $encoder);
++                    }
++                )*
++            }};
++
+             // Only call with queries that can potentially cache to disk.
+             //
+             // This allows the use of trait bounds that only need to be satisfied
 --- library/compiler-builtins/compiler-builtins/src/probestack.rs
 +++ library/compiler-builtins/compiler-builtins/src/probestack.rs
 @@ -42,6 +42,8 @@
