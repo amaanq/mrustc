@@ -119,7 +119,7 @@ pub fn send_token_stream<T: ::std::io::Write>(out_stream: T, ts: TokenStream)
                 Delimiter::Bracket => s.write_sym_1(']'),
                 }
                 },
-            TokenTree::Ident(i) => s.write_ent(Token::Ident(i.val)),
+            TokenTree::Ident(i) => s.write_ent(Token::Ident(if i.is_raw { format!("r#{}", i.val) } else { i.val })),
             TokenTree::Punct(p) => {
                 if p.ch == '\'' {
                     // Get next, must be ident, push lifetime
