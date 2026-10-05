@@ -186,18 +186,19 @@ namespace resolve_ufcs {
                 }
             }
 
-            // TODO: Handle resolution of all items in m_resolve.m_type_equalities
-            // - params might reference each other, so `set_item_generics` has to have been called
-            // - But `m_type_equalities` can end up with non-resolved UFCS paths
-            for(auto& e : m_resolve.m_type_equalities)
-            {
-                visit_type(e.second.ty);
-            }
-
             // TODO: Push a bound that `Self: ThisTrait`
             m_current_type = &impl.m_type;
             m_current_trait = &m_crate.get_trait_by_path(Span(), trait_path);
             m_current_trait_path = &p;
+
+            // TODO: Handle resolution of all items in m_resolve.m_type_equalities
+            // - params might reference each other, so `set_item_generics` has to have been called
+            // - But `m_type_equalities` can end up with non-resolved UFCS paths
+            // - 1.91's `impl DerefMut for Pin<Ptr>` bounds on `Target = Self::Target`, which needs the impl's trait set
+            for(auto& e : m_resolve.m_type_equalities)
+            {
+                visit_type(e.second.ty);
+            }
 
             // The implemented trait is always in scope
             m_traits.push_back( ::std::make_pair( &trait_path, m_current_trait) );

@@ -1326,6 +1326,8 @@ namespace MIR { namespace eval {
                 MonomorphState  temp_ms;
                 temp_ms.pp_impl = &temp_pp_impl;
                 temp_ms.pp_method = &temp_pp_method;
+                // A trait's provided value stays generic over `Self` (1.91's `SizedTypeProperties::SIZE`)
+                temp_ms.self_ty = ::HIR::TypeRef::new_self();
                 DEBUG("- Evaluate " << p);
                 try
                 {
@@ -2944,6 +2946,10 @@ namespace HIR {
                     dst.write_uint(state, 8, e.args.at(0).is_Constant() || e.args.at(0).is_Borrow());
                 }
                 else {
+                    for(const auto& ty : te->params.m_types) {
+                        if( visit_ty_with(local_state.monomorph_expand(ty), [](const HIR::TypeRef& t){ return t.data().is_Generic(); }) )
+                            throw Defer();
+                    }
                     MIR_TODO(state, "Call intrinsic \"" << te->name << "\" - " << terminator);
                 }
                 DEBUG("> E" << this->eval_index << " F" << local_state.frame_index << " " << e.ret_val << " := " << dst);
