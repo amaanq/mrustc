@@ -1635,6 +1635,20 @@ namespace {
             TU_ARMA(Use, e) {
                 visit_use(name, vis, e);
                 }
+            TU_ARMA(Crate, e) {
+                this->visit_vis(vis);
+                m_pmi.send_rword("extern");
+                m_pmi.send_rword("crate");
+                if( e.name == "" )
+                    m_pmi.send_rword("self");
+                else
+                    m_pmi.send_ident(e.name.c_str());
+                if( name != e.name ) {
+                    m_pmi.send_rword("as");
+                    m_pmi.send_ident(name.c_str());
+                }
+                m_pmi.send_symbol(";");
+                }
             // Types
             TU_ARMA(Struct, e) {
                 visit_struct(name, vis, e);
