@@ -1988,6 +1988,7 @@ bool StaticTraitResolve::expand_associated_types__UfcsKnown(const Span& sp, ::HI
     // 1. Bounds
     bool rv = false;
     bool assume_opaque = true;
+    bool found_where_bound = false;
     if(!rv)
     {
         if( replace_equalities(input) )
@@ -2016,6 +2017,7 @@ bool StaticTraitResolve::expand_associated_types__UfcsKnown(const Span& sp, ::HI
                     // If not, assume it's opaque and return as such
                     // TODO: What happens if there's two bounds that overlap? 'F: FnMut<()>, F: FnOnce<(), Output=Bar>'
                     DEBUG("Found impl for " << input << " but no bound on item, assuming opaque");
+                    found_where_bound = true;
                 }
                 else {
                     assume_opaque = false;
@@ -2094,6 +2096,18 @@ bool StaticTraitResolve::expand_associated_types__UfcsKnown(const Span& sp, ::HI
                 }
             }
             DEBUG("e2 = " << e2.type << ", input = " << input);
+        }
+    }
+
+    // The target of an equality bound (`trait A: B<X = <Self as A>::Y>`) stays as named by the where-clause, as
+    // typecheck leaves it, rather than going through a blanket impl that only leads back to the equality
+    if( found_where_bound && e2.type.data().is_Generic() ) {
+        for(const auto& eq : m_type_equalities) {
+            if( eq.second.ty == input ) {
+                DEBUG("Target of equality " << eq.first << ", opaque");
+                e.binding = ::HIR::TypePathBinding::make_Opaque({});
+                return false;
+            }
         }
     }
 
