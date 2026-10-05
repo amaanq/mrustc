@@ -348,3 +348,17 @@
 +pub macro pin($value:expr $(,)?) {
 +    $crate::pin::Pin::<&mut _> { pointer: &mut { $value } }
 +}
+--- library/stdarch/crates/core_arch/src/x86/cpuid.rs
++++ library/stdarch/crates/core_arch/src/x86/cpuid.rs
+@@ -62,6 +62,11 @@
+     if cfg!(target_env = "sgx") {
+         panic!("`__cpuid` cannot be used in SGX");
+     }
++    #[cfg(rust_compiler = "mrustc")]
++    {
++        let _ = (leaf, sub_leaf);
++        return CpuidResult { eax: 0, ebx: 0, ecx: 0, edx: 0 };
++    }
+ 
+     let eax;
+     let ebx;
