@@ -439,6 +439,13 @@ namespace {
                         }
                         if( !rv )
                             continue ;
+                        // By-value `self` on an unsized type (1.96's `impl SpecExtendStr for [&str]`) needs
+                        // `unsized_fn_params`, which mrustc lacks, and nothing sized can call it
+                        if( fcn.m_receiver == ::HIR::Function::Receiver::Value && !resolve.type_is_sized(sp, impl_ty) )
+                        {
+                            DEBUG("Skip by-value method on unsized " << impl_ty);
+                            continue ;
+                        }
 
                         DEBUG("Params = " << fcn.m_params.fmt_args());
                         for(const auto& lft : fcn.m_params.m_lifetimes) {

@@ -4363,6 +4363,10 @@ namespace {
                         emit_lvalue(ve.val);
                         m_of << ".TAG < 0 ? -1 : 0";
                     }
+                    else if( ty == ::HIR::CoreType::F16 || ty == ::HIR::CoreType::F128 ) {
+                        // f16 and f128 are stubs that abort
+                        m_of << "abort()";
+                    }
                     else {
                         // Cast from small to i128/u128
                         emit_lvalue(dst);
@@ -7316,6 +7320,18 @@ namespace {
                 }
             }
             // --- Floating Point
+            else if( name == "fabs" ) {
+                const auto& ty = params.m_types.at(0);
+                if( ty == ::HIR::CoreType::F32 ) {
+                    emit_lvalue(e.ret_val); m_of << " = fabsf("; emit_param(e.args.at(0)); m_of << ")";
+                }
+                else if( ty == ::HIR::CoreType::F64 ) {
+                    emit_lvalue(e.ret_val); m_of << " = fabs("; emit_param(e.args.at(0)); m_of << ")";
+                }
+                else {
+                    m_of << "abort()";
+                }
+            }
             else if(
                 (name.size() > 3 && name.compare(name.size() - 3, 3, "f16") == 0)
                 || (name.size() > 3 && name.compare(name.size() - 3, 3, "f32") == 0)

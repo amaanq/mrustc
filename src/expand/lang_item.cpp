@@ -264,6 +264,23 @@ void handle_lang_item(const Span& sp, AST::Crate& crate, const AST::AbsolutePath
 
             H::add("global_alloc_ty", Handler(ITEM_STRUCT, handle_save));   // ::alloc::alloc::Global
         }
+        if( TARGETVER_LEAST_1_96 )
+        {
+            H::add("reborrow", Handler(ITEM_TRAIT, handle_save));   // ::core::ops::Reborrow
+            H::add("coerce_shared", Handler(ITEM_TRAIT, handle_save));  // ::core::ops::CoerceShared
+            H::add("trivial_clone", Handler(ITEM_TRAIT, handle_save));  // ::core::clone::TrivialClone
+            H::add("field", Handler(ITEM_TRAIT, handle_save));  // ::core::field::Field
+
+            H::add("compiler_move", Handler(ITEM_FN, handle_save));    // ::core::profiling::compiler_move
+            H::add("compiler_copy", Handler(ITEM_FN, handle_save));    // ::core::profiling::compiler_copy
+            H::add("into_try_type", Handler(ITEM_FN, handle_save));    // ::core::ops::residual_into_try_type
+            H::add("offset_of", Handler(ITEM_EXTERN_FN, handle_save)); // ::core::intrinsics::offset_of
+
+            H::add("field_representing_type", Handler(ITEM_STRUCT, handle_save));  // ::core::field::FieldRepresentingType
+            H::add("maybe_dangling", Handler(ITEM_STRUCT, handle_save));   // ::core::mem::MaybeDangling
+            H::add("type_info", Handler(ITEM_STRUCT, handle_save));    // ::core::mem::type_info::Type
+            H::add("RangeToInclusiveCopy", Handler(ITEM_STRUCT, handle_save)); // ::core::range::RangeToInclusive
+        }
     }
     const char* real_name = nullptr;    // For when lang items have their name changed
     auto it = g_handlers.find(name.c_str());
