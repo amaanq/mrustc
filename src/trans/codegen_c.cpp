@@ -7669,6 +7669,8 @@ namespace {
                         case ::HIR::CoreType::U16:  rv.ty = Unsigned; break;
                         case ::HIR::CoreType::U32:  rv.ty = Unsigned; break;
                         case ::HIR::CoreType::U64:  rv.ty = Unsigned; break;
+                        case ::HIR::CoreType::Isize: rv.ty = Signed; break;
+                        case ::HIR::CoreType::Usize: rv.ty = Unsigned; break;
                         //case ::HIR::CoreType::U128: rv.ty = Unsigned; break;
                         case ::HIR::CoreType::F16:  rv.ty = Float;  break;
                         case ::HIR::CoreType::F32:  rv.ty = Float;  break;
@@ -7740,6 +7742,16 @@ namespace {
 
                     // Emulate!
                     emit_lvalue(e.ret_val); m_of << " = (( "; emit_ctype(params.m_types.at(1)); m_of << "*)&"; emit_param(e.args.at(0)); m_of << ")["; emit_param(e.args.at(1)); m_of << "]";
+                }
+                // dst: T, val: U - Set every lane to `val`
+                else if( name_strip == "simd_splat" ) {
+                    size_t size_slot = 0, size_val = 0;
+                    Target_GetSizeOf(sp, m_resolve, params.m_types.at(0), size_slot);
+                    Target_GetSizeOf(sp, m_resolve, params.m_types.at(1), size_val);
+                    MIR_ASSERT(mir_res, size_val > 0 && size_slot / size_val * size_val == size_slot, size_slot << " not a multiple of " << size_val);
+
+                    m_of << "for(int i = 0; i < " << size_slot / size_val << "; i++)";
+                    m_of << "(( "; emit_ctype(params.m_types.at(1)); m_of << "*)&"; emit_lvalue(e.ret_val); m_of << ")[i] = "; emit_param(e.args.at(0));
                 }
                 // Truncate into a bitmask - Converts a collection of [0,!0] into bits
                 else if( name_strip == "simd_bitmask" ) {
@@ -7872,6 +7884,98 @@ namespace {
                     m_of << " (("; info.emit_val_ty(*this); m_of << "*)&"; emit_param(e.args.at(1)); m_of << ")[i],";
                     m_of << " (("; info.emit_val_ty(*this); m_of << "*)&"; emit_param(e.args.at(2)); m_of << ")[i]";
                     m_of << ")";
+                }
+                else if( name_strip == "simd_neg" || name_strip == "simd_bswap" || name_strip == "simd_ctlz"
+                      || name_strip == "simd_saturating_add" || name_strip == "simd_saturating_sub"
+                      || name_strip == "simd_funnel_shl" || name_strip == "simd_funnel_shr"
+                      || name_strip == "simd_reduce_or" || name_strip == "simd_reduce_all"
+                      || name_strip == "simd_as" || name_strip == "simd_masked_load" )
+                {
+                    auto lane = [&](SimdInfo& info, const ::MIR::Param& p) {
+                        m_of << "(("; info.emit_val_ty(*this); m_of << "*)&"; emit_param(p); m_of << ")[i]";
+                    };
+                    auto out_lane = [&](SimdInfo& info) {
+                        m_of << "(("; info.emit_val_ty(*this); m_of << "*)&"; emit_lvalue(e.ret_val); m_of << ")[i]";
+                    };
+                    auto bits_of = [](const SimdInfo& info) { return info.item_size * 8; };
+                    auto utype = [&](const SimdInfo& info) { m_of << "uint" << bits_of(info) << "_t"; };
+                    auto int_limit = [&](const SimdInfo& info, bool is_max) {
+                        auto bits = bits_of(info);
+                        if( info.ty == SimdInfo::Unsigned ) {
+                            m_of << (is_max ? "(" : "((");
+                            if( is_max ) { m_of << "~("; utype(info); m_of << ")0)"; }
+                            else { utype(info); m_of << ")0)"; }
+                        }
+                        else {
+                            m_of << "((int" << bits << "_t)(" << (is_max ? "" : "-") << "(int" << bits << "_t)((("; utype(info); m_of << ")1 << " << bits - 1 << ") - 1)" << (is_max ? "" : " - 1") << "))";
+                        }
+                    };
+                    auto info = SimdInfo::for_ty(*this, params.m_types.at(0));
+                    if( name_strip == "simd_neg" ) {
+                        m_of << "for(int i = 0; i < " << info.count << "; i++) "; out_lane(info); m_of << " = -"; lane(info, e.args.at(0));
+                    }
+                    else if( name_strip == "simd_bswap" ) {
+                        m_of << "for(int i = 0; i < " << info.count << "; i++) "; out_lane(info); m_of << " = ";
+                        if( info.item_size == 1 ) { lane(info, e.args.at(0)); }
+                        else { m_of << "__builtin_bswap" << bits_of(info) << "("; lane(info, e.args.at(0)); m_of << ")"; }
+                    }
+                    else if( name_strip == "simd_ctlz" ) {
+                        m_of << "for(int i = 0; i < " << info.count << "; i++) "; out_lane(info); m_of << " = ";
+                        m_of << "("; lane(info, e.args.at(0)); m_of << " == 0 ? " << bits_of(info) << " : __builtin_clzll((uint64_t)("; utype(info); m_of << ")"; lane(info, e.args.at(0)); m_of << ") - " << 64 - bits_of(info) << ")";
+                    }
+                    else if( name_strip == "simd_saturating_add" || name_strip == "simd_saturating_sub" ) {
+                        bool is_add = name_strip == "simd_saturating_add";
+                        m_of << "for(int i = 0; i < " << info.count << "; i++) { "; info.emit_val_ty(*this); m_of << " r; ";
+                        m_of << "if( __builtin_" << (is_add ? "add" : "sub") << "_overflow("; lane(info, e.args.at(0)); m_of << ", "; lane(info, e.args.at(1)); m_of << ", &r) ) r = ";
+                        if( info.ty == SimdInfo::Unsigned ) {
+                            int_limit(info, is_add);
+                        }
+                        else {
+                            m_of << "("; lane(info, e.args.at(1)); m_of << (is_add ? " < 0" : " > 0") << " ? "; int_limit(info, false); m_of << " : "; int_limit(info, true); m_of << ")";
+                        }
+                        m_of << "; "; out_lane(info); m_of << " = r; }";
+                    }
+                    else if( name_strip == "simd_funnel_shl" || name_strip == "simd_funnel_shr" ) {
+                        bool is_shl = name_strip == "simd_funnel_shl";
+                        auto bits = bits_of(info);
+                        m_of << "for(int i = 0; i < " << info.count << "; i++) { ";
+                        utype(info); m_of << " a = ("; utype(info); m_of << ")"; lane(info, e.args.at(0)); m_of << "; ";
+                        utype(info); m_of << " b = ("; utype(info); m_of << ")"; lane(info, e.args.at(1)); m_of << "; ";
+                        m_of << "unsigned s = (unsigned)(("; utype(info); m_of << ")"; lane(info, e.args.at(2)); m_of << " % " << bits << "); ";
+                        out_lane(info); m_of << " = s == 0 ? " << (is_shl ? "a" : "b") << " : ";
+                        if( is_shl ) m_of << "(a << s) | (b >> (" << bits << " - s))";
+                        else m_of << "(b >> s) | (a << (" << bits << " - s))";
+                        m_of << "; }";
+                    }
+                    else if( name_strip == "simd_reduce_or" ) {
+                        emit_lvalue(e.ret_val); m_of << " = 0; ";
+                        m_of << "for(int i = 0; i < " << info.count << "; i++) "; emit_lvalue(e.ret_val); m_of << " |= "; lane(info, e.args.at(0));
+                    }
+                    else if( name_strip == "simd_reduce_all" ) {
+                        emit_lvalue(e.ret_val); m_of << " = 1; ";
+                        m_of << "for(int i = 0; i < " << info.count << "; i++) "; emit_lvalue(e.ret_val); m_of << " &= "; lane(info, e.args.at(0)); m_of << " != 0";
+                    }
+                    else if( name_strip == "simd_as" ) {
+                        auto dst_info = SimdInfo::for_ty(*this, params.m_types.at(1));
+                        MIR_ASSERT(mir_res, info.count == dst_info.count, "Element counts must match for " << name);
+                        m_of << "for(int i = 0; i < " << dst_info.count << "; i++) "; out_lane(dst_info); m_of << " = ";
+                        if( info.ty == SimdInfo::Float && dst_info.ty != SimdInfo::Float ) {
+                            // `as` from float to int saturates and maps NaN to 0
+                            m_of << "("; lane(info, e.args.at(0)); m_of << " != "; lane(info, e.args.at(0)); m_of << " ? 0 : ";
+                            lane(info, e.args.at(0)); m_of << " <= "; int_limit(dst_info, false); m_of << " ? "; int_limit(dst_info, false); m_of << " : ";
+                            lane(info, e.args.at(0)); m_of << " >= "; int_limit(dst_info, true); m_of << " ? "; int_limit(dst_info, true); m_of << " : ";
+                            m_of << "("; dst_info.emit_val_ty(*this); m_of << ")"; lane(info, e.args.at(0)); m_of << ")";
+                        }
+                        else {
+                            lane(info, e.args.at(0));
+                        }
+                    }
+                    else if( name_strip == "simd_masked_load" ) {
+                        auto val_info = SimdInfo::for_ty(*this, params.m_types.at(2));
+                        MIR_ASSERT(mir_res, info.count == val_info.count, "Element counts must match for " << name);
+                        m_of << "for(int i = 0; i < " << val_info.count << "; i++) "; out_lane(val_info); m_of << " = ";
+                        lane(info, e.args.at(0)); m_of << " ? (("; val_info.emit_val_ty(*this); m_of << "*)"; emit_param(e.args.at(1)); m_of << ")[i] : "; lane(val_info, e.args.at(2));
+                    }
                 }
 
                 else {
