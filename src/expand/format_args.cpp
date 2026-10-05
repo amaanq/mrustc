@@ -480,10 +480,12 @@ namespace {
                         if( strncmp(s, "x?}", 3) == 0 ) {
                             args.debug_ty = FmtArgs::Debug::LowerHex;
                             trait_name = "Debug";
+                            s += 2;
                         }
                         else if( strncmp(s, "X?}", 3) == 0 ) {
                             args.debug_ty = FmtArgs::Debug::UpperHex;
                             trait_name = "Debug";
+                            s += 2;
                         }
                         else {
                             TODO(sp, "Parse formatting fragment at \"" << fmt_frag_str << "\" (long type) - s=...\"" << s << "\"");
@@ -530,6 +532,8 @@ namespace {
         switch(crate.m_load_std)
         {
         case ::AST::Crate::LOAD_NONE:
+            // A `no_core` crate other than core itself (libc's `rustc-dep-of-std`) still has core loaded
+            ap.crate = crate.m_ext_cratename_core;
             break;
         case ::AST::Crate::LOAD_CORE:
             ASSERT_BUG(Span(), crate.m_ext_cratename_core != "", "");
@@ -565,6 +569,166 @@ namespace {
         toks.push_back( mv$(t2) );
         toks.push_back( mv$(t3) );
         toks.push_back( mv$(t4) );
+    }
+
+    /// `fmt::Arguments` from 1.91 on, a byte template plus one `rt::Argument` per placeholder
+    /// - Encoding: `rustc-1.96.0-src/library/core/src/fmt/mod.rs`, above `struct Arguments`
+    void push_template_arguments(::std::vector<TokenTree>& toks, const AST::Crate& crate, const ::std::vector<FmtFrag>& fragments, const ::std::string& tail, const Ident::Hygiene& h)
+    {
+        if( fragments.empty() )
+        {
+            push_path(toks, crate, {"fmt", "Arguments", "from_str"});
+            toks.push_back( TokenTree(TOK_PAREN_OPEN) );
+            toks.push_back( Token(TOK_STRING, tail, h) );
+            toks.push_back( TokenTree(TOK_PAREN_CLOSE) );
+            return ;
+        }
+
+        ::std::vector<uint8_t>  bytes;
+        auto push_u16 = [&](unsigned v) { bytes.push_back(v & 0xFF); bytes.push_back((v >> 8) & 0xFF); };
+        auto push_piece = [&](const ::std::string& s) {
+            size_t ofs = 0;
+            while( ofs < s.size() )
+            {
+                size_t len = ::std::min(s.size() - ofs, size_t(0xFFFF));
+                while( ofs + len < s.size() && (uint8_t(s[ofs + len]) & 0xC0) == 0x80 )
+                    len --;
+                if( len < 0x80 ) {
+                    bytes.push_back(uint8_t(len));
+                }
+                else {
+                    bytes.push_back(0x80);
+                    push_u16(len);
+                }
+                bytes.insert(bytes.end(), s.begin() + ofs, s.begin() + ofs + len);
+                ofs += len;
+            }
+        };
+
+        // Indirect widths and precisions read `usize` arguments placed after the formatted ones
+        ::std::vector<unsigned>    count_args;
+        for(const auto& frag : fragments)
+        {
+            push_piece(frag.leading_text);
+
+            const auto& a = frag.args;
+            uint32_t flags = (a.zero_pad && a.align_char == '0' ? ' ' : a.align_char) & 0x1FFFFF;
+            switch(a.sign)
+            {
+            case FmtArgs::Sign::Unspec: break;
+            case FmtArgs::Sign::Plus:   flags |= 1 << 21; break;
+            case FmtArgs::Sign::Minus:  flags |= 1 << 22; break;
+            }
+            if( a.alternate )   flags |= 1 << 23;
+            if( a.zero_pad )    flags |= 1 << 24;
+            switch(a.debug_ty)
+            {
+            case FmtArgs::Debug::Normal:    break;
+            case FmtArgs::Debug::LowerHex:  flags |= 1 << 25; break;
+            case FmtArgs::Debug::UpperHex:  flags |= 1 << 26; break;
+            }
+            bool has_width = a.width_is_arg || a.width != 0;
+            bool has_prec = a.prec_is_arg || a.prec != 0;
+            if( has_width ) flags |= 1 << 27;
+            if( has_prec )  flags |= 1 << 28;
+            switch(a.align)
+            {
+            case FmtArgs::Align::Unspec:    flags |= 3u << 29; break;
+            case FmtArgs::Align::Left:      flags |= 0u << 29; break;
+            case FmtArgs::Align::Right:     flags |= 1u << 29; break;
+            case FmtArgs::Align::Center:    flags |= 2u << 29; break;
+            }
+
+            uint8_t head = 0xC0;
+            if( flags != (uint32_t(' ') | (3u << 29)) )   head |= 1;
+            if( has_width ) head |= 2;
+            if( has_prec )  head |= 4;
+            if( a.width_is_arg )    head |= 16;
+            if( a.prec_is_arg )     head |= 32;
+            bytes.push_back(head);
+            if( head & 1 ) {
+                for(int i = 0; i < 4; i ++)
+                    bytes.push_back((flags >> (8*i)) & 0xFF);
+            }
+            if( has_width ) {
+                if( a.width_is_arg ) {
+                    push_u16(fragments.size() + count_args.size());
+                    count_args.push_back(a.width);
+                }
+                else {
+                    push_u16(a.width);
+                }
+            }
+            if( has_prec ) {
+                if( a.prec_is_arg ) {
+                    push_u16(fragments.size() + count_args.size());
+                    count_args.push_back(a.prec);
+                }
+                else {
+                    push_u16(a.prec);
+                }
+            }
+        }
+        push_piece(tail);
+        bytes.push_back(0);
+
+        // `static TEMPLATE: [u8; N] = [...];`
+        toks.push_back( TokenTree(TOK_RWORD_STATIC) );
+        toks.push_back( ident("TEMPLATE") );
+        toks.push_back( TokenTree(TOK_COLON) );
+        toks.push_back( TokenTree(TOK_SQUARE_OPEN) );
+        toks.push_back( ident("u8") );
+        toks.push_back( Token(TOK_SEMICOLON) );
+        toks.push_back( Token(U128(bytes.size()), CORETYPE_UINT) );
+        toks.push_back( TokenTree(TOK_SQUARE_CLOSE) );
+        toks.push_back( Token(TOK_EQUAL) );
+        toks.push_back( TokenTree(TOK_SQUARE_OPEN) );
+        for(auto b : bytes) {
+            toks.push_back( Token(U128(b), CORETYPE_U8) );
+            toks.push_back( TokenTree(TOK_COMMA) );
+        }
+        toks.push_back( TokenTree(TOK_SQUARE_CLOSE) );
+        toks.push_back( Token(TOK_SEMICOLON) );
+
+        // `unsafe { Arguments::new(&TEMPLATE, &[Argument::new_display(a0), ..., Argument::from_usize(aN)]) }`
+        toks.push_back( TokenTree(TOK_RWORD_UNSAFE) );
+        toks.push_back( TokenTree(TOK_BRACE_OPEN) );
+        push_path(toks, crate, {"fmt", "Arguments", "new"});
+        toks.push_back( TokenTree(TOK_PAREN_OPEN) );
+        toks.push_back( TokenTree(TOK_AMP) );
+        toks.push_back( ident("TEMPLATE") );
+        toks.push_back( TokenTree(TOK_COMMA) );
+        toks.push_back( TokenTree(TOK_AMP) );
+        toks.push_back( TokenTree(TOK_SQUARE_OPEN) );
+        for(const auto& frag : fragments)
+        {
+            ::std::stringstream new_fn_ss;
+            new_fn_ss << "new";
+            for(const char* s = frag.trait_name; *s; s++) {
+                if( isupper(*s) ) {
+                    new_fn_ss << "_" << char(tolower(*s));
+                }
+                else {
+                    new_fn_ss << *s;
+                }
+            }
+            push_path(toks, crate, {"fmt", "rt", "Argument", new_fn_ss.str().c_str()});
+            toks.push_back( Token(TOK_PAREN_OPEN) );
+            toks.push_back( ident( FMT("a" << frag.arg_index).c_str() ) );
+            toks.push_back( Token(TOK_PAREN_CLOSE) );
+            toks.push_back( TokenTree(TOK_COMMA) );
+        }
+        for(auto idx : count_args)
+        {
+            push_path(toks, crate, {"fmt", "rt", "Argument", "from_usize"});
+            toks.push_back( Token(TOK_PAREN_OPEN) );
+            toks.push_back( ident( FMT("a" << idx).c_str() ) );
+            toks.push_back( Token(TOK_PAREN_CLOSE) );
+            toks.push_back( TokenTree(TOK_COMMA) );
+        }
+        toks.push_back( TokenTree(TOK_SQUARE_CLOSE) );
+        toks.push_back( TokenTree(TOK_PAREN_CLOSE) );
+        toks.push_back( TokenTree(TOK_BRACE_CLOSE) );
     }
 
     ::std::unique_ptr<TokenStream> expand_format_args(const Span& sp, const ::AST::Crate& crate, TTStream& lex, bool add_newline)
@@ -672,6 +836,14 @@ namespace {
         toks.push_back( TokenTree(TOK_PAREN_CLOSE) );
         toks.push_back( TokenTree(TOK_FATARROW) );
         toks.push_back( TokenTree(TOK_BRACE_OPEN) );
+
+        if( TARGETVER_LEAST_1_96 )
+        {
+            push_template_arguments(toks, crate, fragments, tail, h);
+            toks.push_back( TokenTree(TOK_BRACE_CLOSE) );
+            toks.push_back( TokenTree(TOK_BRACE_CLOSE) );
+            return box$( TTStreamO(sp, ParseState(), TokenTree(lex.get_edition(), Ident::Hygiene::new_scope(), mv$(toks))) );
+        }
 
         // Save fragments into a static
         // `static FRAGMENTS: [&'static str; N] = [...];`
