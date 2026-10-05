@@ -1742,7 +1742,8 @@ namespace {
                 {
                     if( auto* pe = e->path.m_data.opt_Generic() ) {
                         if( pe->m_params.m_types.size() == 0 ) {
-                            ERROR(sp, E0000, "Receiver type should have one type param - " << ty);
+                            // Possibly a type alias, checked once aliases are expanded
+                            return true;
                         }
                         //if( pe->m_params.m_types.size() != 1 ) {
                         //   TODO(sp, "Receiver types with more than one param - " << arg_self_ty);
@@ -1903,11 +1904,6 @@ namespace {
     rv.m_receiver = receiver;
     if(receiver == HIR::Function::Receiver::Custom) {
         rv.m_receiver_type = MonomorphiserNop().monomorph_type(f.args()[0].ty.span(), args.front().second, false);
-        // Ensure that the reciever references `Self`
-        ASSERT_BUG(f.args()[0].ty.span(),
-            visit_ty_with(rv.m_receiver_type, [](const HIR::TypeRef& v){ return v.data().is_Generic() && v.data().as_Generic().is_self(); }),
-            rv.m_receiver_type
-            );
     }
     rv.m_abi = RcString::new_interned(f.abi());
     rv.m_unsafe = f.is_unsafe();

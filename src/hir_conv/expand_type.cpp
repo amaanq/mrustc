@@ -537,6 +537,25 @@ public:
             //DEBUG("Updating reciever from " << item.m_receiver_type << " to " << item.m_args.at(0).second);
             //item.m_receiver_type = item.m_args.at(0).second.clone();
             this->visit_type(item.m_receiver_type);
+
+            auto has_self = [](const HIR::TypeRef& ty) {
+                return visit_ty_with(ty, [](const HIR::TypeRef& v){ return v.data().is_Generic() && v.data().as_Generic().is_self(); });
+            };
+            if( !has_self(item.m_receiver_type) && m_impl_type ) {
+                struct V: public ::HIR::Visitor {
+                    const ::HIR::TypeRef& impl_type;
+                    V(const ::HIR::TypeRef& impl_type): impl_type(impl_type) {}
+                    void visit_type(::HIR::TypeRef& ty) override {
+                        if( ty == impl_type )
+                            ty = ::HIR::TypeRef::new_self();
+                        else
+                            ::HIR::Visitor::visit_type(ty);
+                    }
+                } v { *m_impl_type };
+                v.visit_type(item.m_receiver_type);
+                v.visit_type(item.m_args.at(0).second);
+            }
+            ASSERT_BUG(Span(), has_self(item.m_receiver_type), "Receiver doesn't reference Self - " << item.m_receiver_type);
         }
     }
 };
