@@ -5176,7 +5176,8 @@ bool TraitResolution::find_method(const Span& sp,
         }
     }
 
-    auto get_inner_type = [this,sp](const ::HIR::TypeRef& ty, ::std::function<bool(const ::HIR::TypeRef&)> cb)->const ::HIR::TypeRef* {
+    ::std::function<const ::HIR::TypeRef*(const ::HIR::TypeRef&, ::std::function<bool(const ::HIR::TypeRef&)>, bool)> get_inner_type;
+    get_inner_type = [&](const ::HIR::TypeRef& ty, ::std::function<bool(const ::HIR::TypeRef&)> cb, bool through_wrappers)->const ::HIR::TypeRef* {
         if( cb(ty) ) {
             return &ty;
         }
@@ -5189,21 +5190,22 @@ bool TraitResolution::find_method(const Span& sp,
                 return nullptr;
             }
         }
+        else if( auto tp = this->type_is_owned_box(sp, ty) ) {
+            return cb(*tp) ? tp : nullptr;
+        }
+        // Dispatchable receivers such as `Pin<&mut Self>` or `Rc<Self>` wrap the pointee in their first type parameter
+        else if( through_wrappers && ty.data().is_Path() && ty.data().as_Path().path.m_data.is_Generic() && !ty.data().as_Path().path.m_data.as_Generic().m_params.m_types.empty() ) {
+            return get_inner_type(this->m_ivars.get_type(ty.data().as_Path().path.m_data.as_Generic().m_params.m_types[0]), cb, true);
+        }
         else {
-            auto tp = this->type_is_owned_box(sp, ty);
-            if( tp && cb(*tp) ) {
-                return tp;
-            }
-            else {
-                return nullptr;
-            }
+            return nullptr;
         }
         };
 
     DEBUG("> Special cases");
     // 4. If the type is a trait object, search for methods on that trait object
     // - NOTE: This isnt mutually exclusive with the below set (an inherent impl of `(Trait)` is valid)
-    if( const auto* ityp = get_inner_type(ty, [](const auto& t){ return t.data().is_TraitObject(); }) )
+    if( const auto* ityp = get_inner_type(ty, [](const auto& t){ return t.data().is_TraitObject(); }, true) )
     {
         const auto& e = ityp->data().as_TraitObject();
         const auto& trait = this->m_crate.get_trait_by_path(sp, e.m_trait.m_path.m_path);
@@ -5214,7 +5216,9 @@ bool TraitResolution::find_method(const Span& sp,
         {
             DEBUG("- Found trait " << final_trait_path << " (trait object)");
             // - If the receiver is valid, then it's correct (no need to check the type again)
-            if(const auto* self_ty_p = check_method_receiver(sp, *fcn_ptr, ty, access))
+            // - Through a wrapper such as `Pin<P>`, the receiver has to reach the trait object itself
+            const auto* self_ty_p = check_method_receiver(sp, *fcn_ptr, ty, access);
+            if( self_ty_p && (get_inner_type(ty, [](const auto& t){ return t.data().is_TraitObject(); }, false) || *self_ty_p == *ityp) )
             {
                 if(e.m_trait.m_hrtbs) {
                     auto pps = e.m_trait.m_hrtbs->make_empty_params(true);
@@ -5236,7 +5240,7 @@ bool TraitResolution::find_method(const Span& sp,
 
     // 5. Mutually exclusive searches
     // - Erased type - `impl Trait`
-    if( const auto* ityp = get_inner_type(ty, [](const auto& t){ return t.data().is_ErasedType(); }) )
+    if( const auto* ityp = get_inner_type(ty, [](const auto& t){ return t.data().is_ErasedType(); }, false) )
     {
         const auto& e = ityp->data().as_ErasedType();
         for(const auto& trait_path : e.m_traits)
@@ -5258,11 +5262,11 @@ bool TraitResolution::find_method(const Span& sp,
         }
     }
     // Generics: Nothing except the bounds (Which have already been checked)
-    else if( get_inner_type(ty, [](const auto& t){ return t.data().is_Generic(); }) )
+    else if( get_inner_type(ty, [](const auto& t){ return t.data().is_Generic(); }, false) )
     {
     }
     // UfcsKnown paths: Can have trait bounds added by the definer
-    else if( const auto* ityp = get_inner_type(ty, [](const auto& t){ return t.data().is_Path() && t.data().as_Path().path.m_data.is_UfcsKnown(); }) )
+    else if( const auto* ityp = get_inner_type(ty, [](const auto& t){ return t.data().is_Path() && t.data().as_Path().path.m_data.is_UfcsKnown(); }, false) )
     {
         const auto& e = ityp->data().as_Path().path.m_data.as_UfcsKnown();
         DEBUG("UfcsKnown - Search associated type bounds in trait - " << e.trait);
