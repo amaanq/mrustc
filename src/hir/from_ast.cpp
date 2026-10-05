@@ -2654,7 +2654,7 @@ public:
     }
     path_Sized = rv.get_lang_item_path(sp, "sized");
     path_PointeeSized = rv.get_lang_item_path_opt("pointee_sized");
-    path_MetadataSized = rv.get_lang_item_path_opt("metadata_sized");
+    path_MetadataSized = rv.get_lang_item_path_opt("meta_sized");
 
     rv.m_root_module = LowerHIR_Module( crate.m_root_module, ::HIR::ItemPath(rv.m_crate_name) );
     for(auto& e : macros)

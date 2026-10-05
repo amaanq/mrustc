@@ -242,16 +242,8 @@ bool StaticTraitResolve::find_impl(
         else if( TARGETVER_LEAST_1_90 && trait_path == m_lang_MetaSized ) {
             // Next level of sizedness: There's metadata that allows getting the size
             // - No difference to the above?
-            switch( this->metadata_type(sp, type) )
-            {
-            case MetadataType::Unknown:
-                break;
-            case MetadataType::None:
-            case MetadataType::Slice:
-            case MetadataType::TraitObject:
-            case MetadataType::Zero:    // TODO: Does zero apply here?
-                return found_cb( ImplRef(&type, &null_params, &null_assoc), false );
-            }
+            // - A generic of unknown metadata is `?Sized`, which still implies `MetaSized`
+            return found_cb( ImplRef(&type, &null_params, &null_assoc), false );
         }
         else if( TARGETVER_LEAST_1_90 && trait_path == m_lang_Destruct ) {
             // is there anything indestructible? Maybe extern types

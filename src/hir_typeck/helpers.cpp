@@ -1615,19 +1615,11 @@ bool TraitResolution::find_trait_impls_magic(const Span& sp,
         return callback( ImplRef(type.clone(), {}, ::HIR::TraitPath::assoc_list_t()), ::HIR::Compare::Equal );
     }
     else if( TARGETVER_LEAST_1_90 && trait == m_lang_MetaSized ) {
-        TODO(sp, "MetaSized");
-        // Next level of sizedness: There's metadata that allows getting the size
-        // - No difference to the above?
-        //switch( this->metadata_type(sp, type) )
-        //{
-        //case MetadataType::Unknown:
-        //    break;
-        //case MetadataType::None:
-        //case MetadataType::Slice:
-        //case MetadataType::TraitObject:
-        //case MetadataType::Zero:    // TODO: Does zero apply here?
-        //    return found_cb( ImplRef(&null_hrls, &type, &null_params, &null_assoc), false );
-        //}
+        if( find_trait_impls_bound(sp, trait, params, type, callback) )
+            return true;
+        // Next level of sizedness: there's metadata to get the size from, which is every type
+        // mrustc knows of, since it doesn't model `extern type`
+        return callback( ImplRef(type.clone(), {}, ::HIR::TraitPath::assoc_list_t()), ::HIR::Compare::Equal );
     }
 
     if( TARGETVER_LEAST_1_90 && trait == m_lang_Destruct )
