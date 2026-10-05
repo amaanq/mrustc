@@ -1576,8 +1576,9 @@ namespace {
                 rv.new_locals.push_back( monomorph_cb.monomorph_type(sp, m_variable_types.at(cap.first)) );
 
                 rv.capture_usages.push_back(cap.second);
-                auto cap_ty = monomorph_cb.monomorph_type(sp, m_variable_types.at(cap.first));
-                rv.struct_ents.push_back(HIR::VisEnt<HIR::TypeRef> { HIR::Publicity::new_none(), cap_ty.clone() });
+                // The capture nodes are evaluated by the creator, so keep its types (not the new struct's params)
+                auto cap_ty = m_variable_types.at(cap.first).clone();
+                rv.struct_ents.push_back(HIR::VisEnt<HIR::TypeRef> { HIR::Publicity::new_none(), monomorph_cb.monomorph_type(sp, cap_ty) });
                 rv.capture_nodes.push_back(HIR::ExprNodeP(new ::HIR::ExprNode_Variable(sp, "", cap.first)));
                 switch(cap.second)
                 {
