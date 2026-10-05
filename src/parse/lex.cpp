@@ -405,6 +405,12 @@ Token Lexer::getTokenInt()
                 // Handle integers/floats
                 this->ungetc();
                 auto val = this->parseInt(&num_mode);
+                // `0001` keeps its spelling for `stringify!` and `${concat}` (rustc's error codes)
+                auto with_digits = [&](Token t)->Token {
+                    if( m_last_int_digits.size() > 1 )
+                        t.set_int_digits(RcString::new_interned(m_last_int_digits));
+                    return t;
+                };
                 ch = this->getc();
 
                 if( ch == 'e' || ch == 'E' || ch == '.' ) {
@@ -524,11 +530,11 @@ Token Lexer::getTokenInt()
                         m_next_tokens.push_back(Token(TOK_IDENT, Ident(this->realGetHygiene(), RcString::new_interned(suffix))));
                         return Token(val, CORETYPE_ANY);
                     }
-                    return Token(val, num_type);
+                    return with_digits(Token(val, num_type));
                 }
                 else {
                     this->ungetc();
-                    return Token(val, num_type);
+                    return with_digits(Token(val, num_type));
                 }
             }
             // Byte/Raw strings
@@ -911,6 +917,7 @@ Token Lexer::getTokenInt_Identifier(Codepoint leader, Codepoint leader2, bool pa
 U128 Lexer::parseInt(NumMode* num_mode_out)
 {
     auto num_mode = NumMode::DEC;
+    m_last_int_digits.clear();
 
     U128    val(0);
     auto ch = this->getc();
@@ -959,7 +966,9 @@ U128 Lexer::parseInt(NumMode* num_mode_out)
         }
         else {
             num_mode = NumMode::DEC;
+            m_last_int_digits = "0";
             while( ch.isdigit() ) {
+                m_last_int_digits += char(ch.v);
                 val *= 10;
                 val += U128(ch.v - '0');
                 ch = this->getc_num();

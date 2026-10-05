@@ -527,7 +527,9 @@ namespace {
                 }
             case ::Token::Data::TAG_Integer: {
                 auto dty = static_cast<eCoreType>(m_in.read_tag());
-                return ::Token::Data::make_Integer({ dty, m_in.read_u128() });
+                auto val = m_in.read_u128();
+                auto digits = m_in.read_istring();
+                return ::Token::Data::make_Integer({ dty, val, std::move(digits) });
                 }
             case ::Token::Data::TAG_Float: {
                 auto dty = static_cast<eCoreType>(m_in.read_tag());

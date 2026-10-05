@@ -79,6 +79,8 @@ class Token
     (Integer, struct {
         enum eCoreType  m_datatype;
         U128    m_intval;
+        /// Source digits when they differ from `m_intval` printed (leading zeros, e.g. rustc's `E0001` error codes)
+        RcString    m_digits;
         }),
     (Float, struct {
         enum eCoreType  m_datatype;
@@ -143,6 +145,7 @@ public:
     const Ident::Hygiene& str_hygiene() const { return m_hygiene; }
     enum eCoreType  datatype() const { TU_MATCH_DEF(Data, (m_data), (e), (assert(!"Getting datatype of invalid token type");), (Integer, return e.m_datatype;), (Float, return e.m_datatype;)) throw ""; }
     U128 intval() const { return m_data.as_Integer().m_intval; }
+    void set_int_digits(RcString digits) { m_data.as_Integer().m_digits = std::move(digits); }
     double floatval() const { return m_data.as_Float().m_floatval; }
 
     // TODO: Replace these with a way of getting a InterpolatedFragment&

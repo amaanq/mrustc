@@ -69,6 +69,8 @@ private:
         HEX,
     };
     U128 parseInt(NumMode* num_mode);
+    /// Decimal digits of the last `parseInt`, kept when they have leading zeros
+    ::std::string   m_last_int_digits;
     double parseFloat(U128 whole);
     uint32_t parseEscape(char enclosing);
 

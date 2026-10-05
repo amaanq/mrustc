@@ -65,7 +65,7 @@ Token::Token(enum eTokenType type, ::std::string str, Ident::Hygiene h)
 }
 Token::Token(U128 val, enum eCoreType datatype):
     m_type(TOK_INTEGER),
-    m_data( Data::make_Integer({datatype, val}) )
+    m_data( Data::make_Integer({datatype, val, RcString()}) )
 {
 }
 Token Token::make_float(double val, enum eCoreType datatype)
@@ -391,8 +391,12 @@ struct EscapedString {
             }
             return FMT("'\\u{" << ::std::hex << v << ::std::dec << "}'");
         case CORETYPE_ANY:
+            if( m_data.as_Integer().m_digits != "" )
+                return m_data.as_Integer().m_digits.c_str();
             return FMT(m_data.as_Integer().m_intval);
         default:
+            if( m_data.as_Integer().m_digits != "" )
+                return FMT(m_data.as_Integer().m_digits << "_" << coretype_name(m_data.as_Integer().m_datatype));
             return FMT(m_data.as_Integer().m_intval << "_" << coretype_name(m_data.as_Integer().m_datatype));
         }
         break; }

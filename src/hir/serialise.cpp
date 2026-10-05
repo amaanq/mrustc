@@ -702,6 +702,7 @@
             TU_ARM(td, Integer, e) {
                 m_out.write_tag(e.m_datatype);
                 m_out.write_u128(e.m_intval);
+                m_out.write_string(e.m_digits);
                 } break;
             TU_ARM(td, Float, e) {
                 m_out.write_tag(e.m_datatype);
