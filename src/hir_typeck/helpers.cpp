@@ -4625,7 +4625,9 @@ bool TraitResolution::trait_contains_type(const Span& sp, const ::HIR::GenericPa
                             // Run EAT
                             atyv = this->expand_associated_types( sp, ::HIR::TypeRef::new_path( mv$(p), {} ) );
                         }
-                        TODO(sp, "Monomorph " << aty.second.source_trait << " from " << de->m_trait.m_path.m_params << " to " << tmp_e.m_trait.m_path.m_params);
+                        if( aty.second.source_trait.m_params.has_params() && de->m_trait.m_path.m_params != tmp_e.m_trait.m_path.m_params ) {
+                            TODO(sp, "Monomorph " << aty.second.source_trait << " from " << de->m_trait.m_path.m_params << " to " << tmp_e.m_trait.m_path.m_params);
+                        }
                         tmp_e.m_trait.m_type_bounds[aty.first] = ::HIR::TraitPath::AtyEqual {
                             aty.second.source_trait.clone(),    // TODO: Monomorph from `de->m_trait.m_path.m_params` to `tmp_e.m_trait.m_path.m_params`
                             {},
