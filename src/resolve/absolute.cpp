@@ -1273,6 +1273,17 @@ namespace {
             TU_MATCH_HDRA( (it->second->ent), {)
             TU_ARMA(Import, e) {
                 DEBUG("`" << n.name() << "`: Import " << e.path);
+                // A re-exported primitive followed by an item (`::core::primitive::str::bytes`) is `<str>::bytes`
+                if( e.path.crate_name() == CRATE_BUILTINS && !e.path.components().empty() ) {
+                    auto ct = coretype_fromstring(e.path.components().back().c_str());
+                    if( ct != CORETYPE_INVAL ) {
+                        auto new_path = ::AST::Path::new_ufcs_ty( ::TypeRef(sp, ct) );
+                        for(unsigned int j = i + 1; j < path.nodes().size(); j ++)
+                            new_path.nodes().push_back( mv$(path.nodes()[j]) );
+                        path = mv$(new_path);
+                        return Resolve_Absolute_Path_BindUFCS(context, sp, mode,  path);
+                    }
+                }
                 // - Update path then restart
                 auto newpath = AST::Path(e.path.crate_name(), {});
                 for(const auto& n : e.path.components())
@@ -2910,6 +2921,29 @@ void Resolve_Absolute_Mod( Context item_context, ::AST::Module& mod )
                 Resolve_Absolute_Generic(item_context,  def.params());
 
                 Resolve_Absolute_ImplItems(item_context,  e.items());
+
+                // rustc keeps the implemented trait in scope for items nested in the methods (rustc_ast's
+                // `impl Display for CfgEntry` calls `entry.fmt(f)` from a nested fn)
+                if( def.trait().ent.is_valid() && def.trait().ent.m_bindings.type.binding.is_Trait() ) {
+                    struct V: public AST::NodeVisitorDef {
+                        const AST::AbsolutePath& trait_path;
+                        V(const AST::AbsolutePath& trait_path): trait_path(trait_path) {}
+                        void visit(AST::ExprNode_Block& node) override {
+                            if( node.m_local_mod ) {
+                                auto& traits = node.m_local_mod->m_traits;
+                                if( ::std::find(traits.begin(), traits.end(), trait_path) == traits.end() )
+                                    traits.push_back(trait_path);
+                            }
+                            AST::NodeVisitorDef::visit(node);
+                        }
+                    } v { def.trait().ent.m_bindings.type.path };
+                    for(auto& ii : e.items()) {
+                        if( auto* f = ii.data->opt_Function() ) {
+                            if( f->code().is_valid() )
+                                f->code().visit_nodes(v);
+                        }
+                    }
+                }
 
                 item_context.pop(def.params());
                 item_context.pop_self( def.type() );
