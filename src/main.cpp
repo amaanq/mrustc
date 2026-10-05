@@ -1198,9 +1198,15 @@ ProgramParams::ProgramParams(int argc, char *argv[])
                 const char* rustc_target = target_version_str(gTargetVersion);
                 // NOTE: Starts the version with "rustc 1.29.100" so build scripts don't get confused
                 ::std::cout << "rustc " << rustc_target << ".100 (mrustc " << Version_GetString() << ")" << ::std::endl;
-                ::std::cout << "release: " << rustc_target << ".100" << ::std::endl;    // `autoconfig` looks for this line
-                ::std::cout << "- Build time: " << gsVersion_BuildTime << ::std::endl;
-                ::std::cout << "- Commit: " << gsVersion_GitHash << (gbVersion_GitDirty ? " (dirty tree)" : "") << ::std::endl;
+                // `rustversion` parses the last line of the plain output, `autocfg` passes `--verbose` and wants `release:`
+                bool verbose = false;
+                for(int j = 1; j < argc; j ++)
+                    verbose |= strcmp(argv[j], "--verbose") == 0 || strcmp(argv[j], "-v") == 0;
+                if( verbose ) {
+                    ::std::cout << "release: " << rustc_target << ".100" << ::std::endl;
+                    ::std::cout << "- Build time: " << gsVersion_BuildTime << ::std::endl;
+                    ::std::cout << "- Commit: " << gsVersion_GitHash << (gbVersion_GitDirty ? " (dirty tree)" : "") << ::std::endl;
+                }
                 exit(0);
             }
             // --out-dir <dir>  >> Set the output directory for automatically-named files
