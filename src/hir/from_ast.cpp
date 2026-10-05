@@ -1244,9 +1244,11 @@ namespace {
             // NOTE: I'd love to have this be a `Constant`, but that would require duplicating the type and the params
             // meh. Lazy option is to just duplicate
             auto name = RcString::new_interned(FMT(path.get_name() << "#default_" << field.m_name));
+            auto item_params = params.make_nop_params(1);
+            auto const_type = MonomorphStatePtr(nullptr, &item_params, nullptr).monomorph_type(Span(), type);
             out_mod.m_value_items.insert(std::make_pair(name, ::std::make_unique<HIR::VisEnt<HIR::ValueItem>>(HIR::VisEnt<HIR::ValueItem>{
                 HIR::Publicity::new_global(),
-                HIR::ValueItem(HIR::Constant(params.clone(), type.clone(), LowerHIR_Expr(field.m_default)))
+                HIR::ValueItem(HIR::Constant(params.clone(), std::move(const_type), LowerHIR_Expr(field.m_default)))
             })));
             field_default = std::make_unique<HIR::GenericPath>((*path.parent + name).get_simple_path(), params.make_nop_params(0) );
         }

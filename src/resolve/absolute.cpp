@@ -2773,8 +2773,13 @@ void Resolve_Absolute_Struct(Context& item_context, ::AST::Struct& e)
     (Struct,
         for(auto& field : s.ents) {
             Resolve_Absolute_Type(item_context,  field.m_type);
+        }
+        // Defaults are lowered to constants that take the struct's parameters as their own
+        item_context.push( e.params(), GenericSlot::Level::Method );
+        for(auto& field : s.ents) {
             Resolve_Absolute_Expr(item_context,  field.m_default);
         }
+        item_context.pop( e.params() );
         )
     )
 
