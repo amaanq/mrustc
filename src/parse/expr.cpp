@@ -425,9 +425,15 @@ ExprNodeP Parse_ExprBlockLine_Stmt(TokenStream& lex, bool& has_semicolon)
     return ret;
 }
 
-std::vector<AST::IfLet_Condition> Parse_IfLetChain(TokenStream& lex)
+std::vector<AST::IfLet_Condition> Parse_IfLetChain(TokenStream& lex, bool allow_struct_literal=false)
 {
     Token   tok;
+    auto parse_cond = [&]() {
+        if( allow_struct_literal )
+            return Parse_Expr3(lex);
+        SET_PARSE_FLAG(lex, disallow_struct_literal);
+        return Parse_Expr3(lex); // This is just after `||` and `&&`
+    };
     std::vector<AST::IfLet_Condition>   conditions;
     bool had_pat = false;
     do {
@@ -435,20 +441,12 @@ std::vector<AST::IfLet_Condition> Parse_IfLetChain(TokenStream& lex)
             lex.getTokenIf(TOK_PIPE);
             auto pat = Parse_Pattern(lex, AllowOrPattern::Yes);
             GET_CHECK_TOK(tok, lex, TOK_EQUAL);
-            ExprNodeP val;
-            {
-                SET_PARSE_FLAG(lex, disallow_struct_literal);
-                val = Parse_Expr3(lex); // This is just after `||` and `&&`
-            }
+            ExprNodeP val = parse_cond();
             conditions.push_back(AST::IfLet_Condition { box$(pat), std::move(val) });
             had_pat = true;
         }
         else {
-            ExprNodeP val;
-            {
-                SET_PARSE_FLAG(lex, disallow_struct_literal);
-                val = Parse_Expr3(lex); // This is just after `||` and `&&`
-            }
+            ExprNodeP val = parse_cond();
 
             // Chain boolean expressions to simplify downstream representation
             if( conditions.size() > 0 && !conditions.back().opt_pat ) {
@@ -585,7 +583,7 @@ ExprNodeP Parse_Expr_Match(TokenStream& lex)
 
         if( tok.type() == TOK_RWORD_IF )
         {
-            arm.m_guard = Parse_IfLetChain(lex);
+            arm.m_guard = Parse_IfLetChain(lex, /*allow_struct_literal=*/true);
             GET_TOK(tok, lex);
         }
         CHECK_TOK(tok, TOK_FATARROW);
