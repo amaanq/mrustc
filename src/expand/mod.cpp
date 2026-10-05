@@ -2056,11 +2056,15 @@ void Expand_Mod(const ExpandState& es, ::AST::AbsolutePath modpath, ::AST::Modul
         {
             struct H {
                 static void filter_cfg(::std::vector<AST::StructItem>& lst) {
+                    for(auto& v : lst)
+                        Expand_Attrs_CfgAttr(v.m_attrs);
                     auto new_end = ::std::remove_if(lst.begin(), lst.end(), [&](const AST::StructItem& v) { return !check_cfg_attrs(v.m_attrs); });
                     DEBUG(lst.size() << " -> " << new_end - lst.begin());
                     lst.erase(new_end, lst.end());
                 }
                 static void filter_cfg(::std::vector<AST::TupleItem>& lst) {
+                    for(auto& v : lst)
+                        Expand_Attrs_CfgAttr(v.m_attrs);
                     auto new_end = ::std::remove_if(lst.begin(), lst.end(), [&](const AST::TupleItem& v) { return !check_cfg_attrs(v.m_attrs); });
                     DEBUG(lst.size() << " -> " << new_end - lst.begin());
                     lst.erase(new_end, lst.end());
@@ -2087,6 +2091,7 @@ void Expand_Mod(const ExpandState& es, ::AST::AbsolutePath modpath, ::AST::Modul
             TU_ARMA(Enum, enm) {
                 for(auto it = enm.variants().begin(); it != enm.variants().end(); )
                 {
+                    Expand_Attrs_CfgAttr(it->m_attrs);
                     if( !check_cfg_attrs(it->m_attrs) ) {
                         it = enm.variants().erase(it);
                     }
