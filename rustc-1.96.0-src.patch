@@ -326,3 +326,25 @@
  
 +#[cfg(not(rust_compiler = "mrustc"))]
  unsafe impl<T: PointeeSized> Freeze for pattern_type!(*mut T is !null) {}
+--- library/core/src/pin.rs
++++ library/core/src/pin.rs
+@@ -2025,6 +2025,7 @@
+ #[rustc_diagnostic_item = "pin_macro"]
+ // `super` gets removed by rustfmt
+ #[rustfmt::skip]
++#[cfg(not(rust_compiler = "mrustc"))]
+ pub macro pin($value:expr $(,)?) {
+     {
+         super let mut pinned = $value;
+@@ -2032,3 +2033,11 @@
+         unsafe { $crate::pin::Pin::new_unchecked(&mut pinned) }
+     }
+ }
++/// mrustc has no `super let`, so this keeps the value alive through temporary lifetime extension
++#[stable(feature = "pin_macro", since = "1.68.0")]
++#[rustc_macro_transparency = "semiopaque"]
++#[rustc_diagnostic_item = "pin_macro"]
++#[cfg(rust_compiler = "mrustc")]
++pub macro pin($value:expr $(,)?) {
++    $crate::pin::Pin::<&mut _> { pointer: &mut { $value } }
++}
