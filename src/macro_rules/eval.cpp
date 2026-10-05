@@ -959,12 +959,32 @@ namespace
         }
         return true;
     }
+    /// A bound's constness, `~const`, `[const]` (1.91) or `const`
+    void consume_const_bound(TokenStreamRO& lex)
+    {
+        if( lex.consume_if(TOK_TILDE) ) {
+            lex.consume_if(TOK_RWORD_CONST);
+        }
+        else if( lex.next() == TOK_SQUARE_OPEN ) {
+            auto peek = lex.clone();
+            peek.consume();
+            if( peek.consume_if(TOK_RWORD_CONST) && peek.consume_if(TOK_SQUARE_CLOSE) ) {
+                lex.consume();
+                lex.consume();
+                lex.consume();
+            }
+        }
+        else {
+            lex.consume_if(TOK_RWORD_CONST);
+        }
+    }
     bool consume_type_TraitList(TokenStreamRO& lex)
     {
         do {
             if( lex.consume_if(TOK_LIFETIME) ) {
                 continue ;
             }
+            consume_const_bound(lex);
             if( !consume_path(lex, true) )
                 return false;
         } while( lex.consume_if(TOK_PLUS) );
@@ -1308,6 +1328,15 @@ namespace
             case TOK_TRIPLE_DOT:
                 break;
 
+            // Inline `const { ... }`, possibly with the block interpolated
+            case TOK_RWORD_CONST:
+                lex.consume();
+                if( lex.consume_if(TOK_INTERPOLATED_BLOCK) )
+                    break;
+                if(lex.next() != TOK_BRACE_OPEN )
+                    return false;
+                consume_tt(lex);
+                break;
             case TOK_RWORD_UNSAFE:
                 lex.consume();
                 if(lex.next() != TOK_BRACE_OPEN )
@@ -1594,6 +1623,7 @@ namespace
                                 }
                                 else {
                                     lex.consume_if(TOK_QMARK);
+                                    consume_const_bound(lex);
                                     if( !consume_path(lex, true) )
                                         return false;
                                 }
@@ -1669,8 +1699,11 @@ namespace
         // impl [Foo for] Bar { ... }
         case TOK_RWORD_IMPL:
             lex.consume();
+        impl:
             if( !H::maybe_generics(lex) )
                 return false;
+            lex.consume_if(TOK_RWORD_CONST);
+            lex.consume_if(TOK_EXCLAM);
             if( !consume_type(lex) )
                 return false;
             if( lex.consume_if(TOK_RWORD_FOR) )
@@ -1802,6 +1835,11 @@ namespace
             lex.consume();
             if(lex.next() == TOK_RWORD_UNSAFE)
                 lex.consume();
+            // 1.91 - `const impl` and `const trait`
+            if( lex.consume_if(TOK_RWORD_IMPL) )
+                goto impl;
+            if( lex.consume_if(TOK_RWORD_TRAIT) )
+                goto trait;
             if(lex.next() == TOK_RWORD_EXTERN)
                 lex.consume();
             if( lex.consume_if(TOK_RWORD_FN) )

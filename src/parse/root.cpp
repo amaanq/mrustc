@@ -251,15 +251,12 @@ void Parse_TypeBound(TokenStream& lex, AST::GenericParams& ret, TypeRef checked_
                 } ));
         }
         else {
-            if( lex.getTokenIf(TOK_TILDE) ) {
-                GET_CHECK_TOK(tok, lex, TOK_RWORD_CONST);
-            }
-            else if( lex.getTokenIf(TOK_RWORD_CONST) ) {
-            }
+            Parse_ConstBoundOpt(lex);
             ::AST::HigherRankedBounds inner_hrls;
             if( lex.getTokenIf(TOK_RWORD_FOR) )
             {
                 inner_hrls = Parse_HRB(lex);
+                Parse_ConstBoundOpt(lex);
             }
             auto trait_path = Parse_Path(lex, PATH_GENERIC_TYPE);
 
@@ -925,14 +922,8 @@ AST::Trait Parse_TraitDef(TokenStream& lex, const AST::AttributeList& meta_items
                 break;
             }
             else {
-                if( tok.type() == TOK_TILDE ) {
-                    GET_CHECK_TOK(tok, lex, TOK_RWORD_CONST);
-                    GET_TOK(tok, lex);
-                }
-                else if( tok.type() == TOK_RWORD_CONST ) {
-                    GET_TOK(tok, lex);
-                }
                 PUTBACK(tok, lex);
+                Parse_ConstBoundOpt(lex);
                 auto hrbs = Parse_HRB_Opt(lex);
                 supertraits.push_back( GET_SPANNED(Type_TraitPath, lex, (Type_TraitPath(mv$(hrbs), Parse_Path(lex, PATH_GENERIC_TYPE)) )) );
             }
@@ -1458,7 +1449,8 @@ AST::Named<AST::Item> Parse_ExternBlock_Item(TokenStream& lex, const std::string
             PUTBACK(tok, lex);
         }
     }
-    else {
+    // `unsafe extern` blocks mark their unsafe items explicitly (the default)
+    else if( tok.type() != TOK_RWORD_UNSAFE ) {
         PUTBACK(tok, lex);
     }
     switch( GET_TOK(tok, lex) )
@@ -2055,7 +2047,33 @@ namespace {
             GET_CHECK_TOK(tok, lex, TOK_SEMICOLON);
             item_data = ::AST::Item( ::AST::Static(AST::Static::CONST, mv$(type), mv$(val)) );
             break; }
+        // `const impl`, constness is not tracked
+        case TOK_RWORD_IMPL: {
+            auto impl = Parse_Impl(lex, meta_items);
+            return ::AST::Named< ::AST::Item> { Span(), std::move(meta_items), AST::Visibility::make_global(), "", std::move(impl) };
+            }
+        // 1.91 - `const trait` replaces `#[const_trait] trait`, the constness is not tracked
+        case TOK_RWORD_TRAIT: {
+            GET_CHECK_TOK(tok, lex, TOK_IDENT);
+            item_name = tok.ident().name;
+            item_data = ::AST::Item( Parse_TraitDef(lex, meta_items, Parse_GenericParamsOpt(lex)) );
+            break; }
         case TOK_RWORD_UNSAFE: {
+            if( lex.getTokenIf(TOK_RWORD_IMPL) ) {
+                auto impl = Parse_Impl(lex, meta_items, true);
+                if( impl.is_Impl() ) {
+                    impl.as_Impl().def().set_is_unsafe();
+                }
+                return ::AST::Named< ::AST::Item> { Span(), mv$(meta_items), AST::Visibility::make_global(), "", mv$(impl) };
+            }
+            if( lex.getTokenIf(TOK_RWORD_TRAIT) ) {
+                GET_CHECK_TOK(tok, lex, TOK_IDENT);
+                item_name = tok.ident().name;
+                auto tr = Parse_TraitDef(lex, meta_items, Parse_GenericParamsOpt(lex));
+                tr.set_is_unsafe();
+                item_data = ::AST::Item( ::std::move(tr) );
+                break;
+            }
             struct H { static std::string opt_extern(Token& tok, TokenStream& lex) {
                 if( lex.lookahead(0) == TOK_RWORD_EXTERN ) {
                     GET_TOK(tok, lex);

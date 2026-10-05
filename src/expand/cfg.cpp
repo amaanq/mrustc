@@ -54,6 +54,15 @@ namespace {
             auto ilex = TTStream(meta.span(), ParseState(), meta.data());
             return check_cfg_inner1(meta.name().as_trivial(), ilex);
         }
+        // 1.88 - `cfg(true)` and `cfg(false)`
+        else if( lex.getTokenIf(TOK_RWORD_TRUE) )
+        {
+            return true;
+        }
+        else if( lex.getTokenIf(TOK_RWORD_FALSE) )
+        {
+            return false;
+        }
         else
         {
             auto name = lex.getTokenCheck(TOK_IDENT).ident().name;
@@ -228,9 +237,29 @@ class CCfgSelectExpander:
         auto lex = TTStream(sp, ParseState(), tt);
         for(;;)
         {
+            if( lex.lookahead(0) == TOK_EOF )
+                break;
             bool rv = lex.getTokenIf(TOK_UNDERSCORE) || check_cfg_inner(lex);
             lex.getTokenCheck(TOK_FATARROW);
-            auto t = Parse_TT(lex, true);
+            TokenTree   t;
+            if( lex.lookahead(0) == TOK_BRACE_OPEN ) {
+                t = Parse_TT(lex, true);
+                lex.getTokenIf(TOK_COMMA);
+            }
+            else {
+                // 1.96 - an expression arm, `cfg => expr,`
+                std::vector<TokenTree>  toks;
+                while( lex.lookahead(0) != TOK_COMMA && lex.lookahead(0) != TOK_EOF )
+                {
+                    bool was_brace = lex.lookahead(0) == TOK_BRACE_OPEN;
+                    toks.push_back( Parse_TT(lex, false) );
+                    // A block-like arm needs no comma, and nothing in an expression follows `}` with `_ =>` or a cfg predicate
+                    if( was_brace && ((lex.lookahead(0) == TOK_UNDERSCORE && lex.lookahead(1) == TOK_FATARROW) || lex.lookahead(0) == TOK_IDENT) )
+                        break;
+                }
+                lex.getTokenIf(TOK_COMMA);
+                t = TokenTree(lex.get_edition(), lex.get_hygiene(), std::move(toks));
+            }
             if(rv) {
                 return box$( TTStreamO(sp, ParseState(), std::move(t)) );
             }

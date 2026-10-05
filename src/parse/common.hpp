@@ -39,6 +39,7 @@ extern AST::Path   Parse_Path(TokenStream& lex, eParsePathGenericMode generic_mo
 extern AST::Path   Parse_Path(TokenStream& lex, bool is_abs, eParsePathGenericMode generic_mode);
 extern ::std::vector<AST::PathNode> Parse_PathNodes(TokenStream& lex, eParsePathGenericMode generic_mode);
 extern AST::PathParams Parse_Path_GenericList(TokenStream& lex);
+extern void Parse_ConstBoundOpt(TokenStream& lex);
 
 
 extern AST::Visibility Parse_Publicity(TokenStream& lex, bool allow_restricted=true);

@@ -12,6 +12,23 @@
 AST::Path   Parse_Path(TokenStream& lex, eParsePathGenericMode generic_mode);
 AST::Path   Parse_Path(TokenStream& lex, bool is_abs, eParsePathGenericMode generic_mode);
 ::std::vector<AST::PathNode> Parse_PathNodes(TokenStream& lex, eParsePathGenericMode generic_mode);
+/// Skips a bound's constness, `~const`, `[const]` (1.91) or `const`
+void Parse_ConstBoundOpt(TokenStream& lex)
+{
+    Token   tok;
+    if( lex.getTokenIf(TOK_TILDE) ) {
+        GET_CHECK_TOK(tok, lex, TOK_RWORD_CONST);
+    }
+    else if( lex.lookahead(0) == TOK_SQUARE_OPEN && lex.lookahead(1) == TOK_RWORD_CONST ) {
+        GET_CHECK_TOK(tok, lex, TOK_SQUARE_OPEN);
+        GET_CHECK_TOK(tok, lex, TOK_RWORD_CONST);
+        GET_CHECK_TOK(tok, lex, TOK_SQUARE_CLOSE);
+    }
+    else {
+        lex.getTokenIf(TOK_RWORD_CONST);
+    }
+}
+
 AST::PathParams Parse_Path_GenericList(TokenStream& lex);
 
 AST::Path Parse_Path(TokenStream& lex, eParsePathGenericMode generic_mode)
@@ -277,6 +294,7 @@ AST::Path Parse_Path(TokenStream& lex, bool is_abs, eParsePathGenericMode generi
                     // TODO: Trait list instead of duplicating the name
                     for(;;)
                     {
+                        Parse_ConstBoundOpt(lex);
                         traits.push_back( Parse_Path(lex, PATH_GENERIC_TYPE) );
                         if(lex.lookahead(0) != TOK_PLUS)
                             break;
