@@ -362,6 +362,10 @@ void Resolve_Use_Mod(const ::AST::Crate& crate, ::AST::Module& mod, ::AST::Path 
     }
 }
 
+namespace {
+    unsigned g_glob_temp_resolve_depth = 0;
+}
+
 ::AST::Path::Bindings Resolve_Use_GetBinding_Mod(
         const Span& span,
         const ::AST::Crate& crate, const ::AST::AbsolutePath& source_mod_path, const ::AST::Module& mod,
@@ -631,7 +635,9 @@ void Resolve_Use_Mod(const ::AST::Crate& crate, ::AST::Module& mod, ::AST::Path 
                     if( ::std::find(resolve_stack_ptrs.begin(), resolve_stack_ptrs.end(), &imp_data) == resolve_stack_ptrs.end() )
                     {
                         resolve_stack_ptrs.push_back( &imp_data );
+                        g_glob_temp_resolve_depth ++;
                         bindings_ = Resolve_Use_GetBinding(sp2, crate, mod.path(), Resolve_Use_AbsolutisePath(sp2, crate, mod.path(), imp_e.path), parent_modules, /*type_only=*/true);
+                        g_glob_temp_resolve_depth --;
                         if( bindings_.type.is_Unbound() ) {
                             DEBUG("Recursion detected, skipping " << imp_e.path);
                             resolve_stack_ptrs.pop_back();
@@ -1151,6 +1157,11 @@ namespace {
         default:
             ERROR(span, E0000, "Unexpected item type " << b.type.binding.tag_str() << " in import of " << path);
         TU_ARMA(Unbound, e) {
+            // A glob's speculative resolve can hit the recursion guard, its caller skips an unbound result
+            if( g_glob_temp_resolve_depth > 0 ) {
+                DEBUG("Unbound component " << i << " during a glob's temp resolve");
+                return ::AST::Path::Bindings();
+            }
             ERROR(span, E0000, "Cannot find component " << i << " of " << path << " (" << b.type.binding << ")");
             }
         TU_ARMA(Crate, e) {

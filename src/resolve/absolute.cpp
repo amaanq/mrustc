@@ -626,7 +626,8 @@ namespace
                         else {
                             for(const auto& i : mod->m_items)
                             {
-                                if( i->name == node ) {
+                                // A function or macro can share the module's name, in another namespace
+                                if( i->name == node && i->data.is_Module() ) {
                                     next = &i->data.as_Module();
                                     break;
                                 }
@@ -920,6 +921,8 @@ void Resolve_Absolute_PathParams(/*const*/ Context& context, const Span& sp, ::A
             }
             }
         TU_ARMA(Value, n) {
+            // A const argument is its own body, like an array size (1.96's thread-local `Storage<T, { let .. }>`)
+            auto _h = context.enter_rootblock();
             Resolve_Absolute_ExprNode(context, *n);
             }
         TU_ARMA(AssociatedTyEqual, a) {
