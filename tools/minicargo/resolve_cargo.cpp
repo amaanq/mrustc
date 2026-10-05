@@ -8,6 +8,7 @@
 #include <debug.h>
 
 #include <cassert>
+#include <fstream>
 #include <set>
 #include <deque>
 #include <algorithm>    // std::sort
@@ -29,6 +30,9 @@ struct DepSpecQueue {
 };
 class Policy {
 public:
+    /// Versions pinned by the workspace's `Cargo.lock`, preferred over the newest vendored ones
+    const LockedVersions* locked = nullptr;
+
     bool pick_next_dep(DepSpec& out, DepSpecQueue& queue) const {
         if( queue.stack.empty() ) {
             return false;
@@ -57,6 +61,18 @@ public:
             return !dep_spec.version_spec.accepts(v) || this->needs_version_unification(dep_spec.package_name, v, resolved);
         });
         dep_versions.erase(new_end, dep_versions.end());
+        if( locked ) {
+            auto it = locked->find(dep_spec.package_name);
+            if( it != locked->end() ) {
+                std::vector<PackageVersion> pinned;
+                for(const auto& v : dep_versions) {
+                    if( std::find(it->second.begin(), it->second.end(), v) != it->second.end() )
+                        pinned.push_back(v);
+                }
+                if( !pinned.empty() )
+                    dep_versions = std::move(pinned);
+            }
+        }
         // Sort ascending, so pop_back gets the newest version
         ::std::sort(dep_versions.begin(), dep_versions.end());
         return dep_versions;
@@ -250,9 +266,30 @@ namespace {
     };
 }
 
-LockfileContents ResolveDependencies_Cargo(Repository& repo, const PackageManifest& root_manifest, unsigned version)
+LockedVersions Lockfile_ReadVersions(const ::helpers::path& lockfile_path)
+{
+    LockedVersions  rv;
+    std::ifstream   is(lockfile_path.str());
+    std::string line, name;
+    while( std::getline(is, line) )
+    {
+        if( line == "[[package]]" ) {
+            name.clear();
+        }
+        else if( line.compare(0, 8, "name = \"") == 0 ) {
+            name = line.substr(8, line.size() - 9);
+        }
+        else if( line.compare(0, 11, "version = \"") == 0 && !name.empty() ) {
+            rv[name].push_back( PackageVersion::from_string(line.substr(11, line.size() - 12)) );
+        }
+    }
+    return rv;
+}
+
+LockfileContents ResolveDependencies_Cargo(Repository& repo, const PackageManifest& root_manifest, unsigned version, const LockedVersions* locked)
 {
     State   state { repo };
+    state.policy.locked = locked;
     
     // versions:
     // - 1: Standard

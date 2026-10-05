@@ -194,9 +194,11 @@ int main(int argc, const char* argv[])
                 ? workspace_manifest_path.parent() / "Cargo.lock"
                 : dir / "Cargo.lock"
                 ;
+            LockedVersions  locked;
             if( ::std::ifstream(lockfile_path).is_open() ) {
                 // TODO: Parse the lockfile and use it
                 //ResolveDepdencies_CargoLockFile(repo, m, lockfile_path);
+                locked = Lockfile_ReadVersions(lockfile_path);
             }
             // TODO: Implement the cargo resolver variants (need to find good docs)
 
@@ -204,7 +206,7 @@ int main(int argc, const char* argv[])
                 lockfile = ResolveDependencies_MinicargoOriginal(repo, m);
             }
             else {
-                lockfile = ResolveDependencies_Cargo(repo, m, 1/*workspace_manifest.resolver_version*/);
+                lockfile = ResolveDependencies_Cargo(repo, m, 1/*workspace_manifest.resolver_version*/, &locked);
             }
 
             // TODO: Save the selected versions into a lockfile?
