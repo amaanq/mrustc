@@ -2457,7 +2457,7 @@ namespace {
                                 m_hrls.push_back(hrls_def.make_empty_params(true));
                             };
 
-                            if(is_opaque(t)) {
+                            if(is_opaque(t) && !t.data().is_Generic()) {
                                 // Iterate type lifetime bounds
                                 state.iterate_type_lifetime_bounds(t, [&](const HIR::LifetimeRef& lft)->bool {
                                     DEBUG("Generic opaque bound: " << t << ": " << lft);
