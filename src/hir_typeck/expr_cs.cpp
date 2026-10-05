@@ -349,6 +349,10 @@ namespace {
                     // If this looks like `&mut [?; N]` -> `*mut ?` then do a possible equate between the two types
                     if( src_inner.data().is_Array() ) {
                         if( const auto* s_e_i = this->context.get_type(src_inner.data().as_Array().inner).data().opt_Infer() ) {
+                            if( const auto* d_sl = ity.data().opt_Slice() ) {
+                                this->context.equate_types(sp, src_inner.data().as_Array().inner, d_sl->inner);
+                                return ;
+                            }
                             this->context.possible_equate_ivar(sp, s_e_i->index, ity, Context::PossibleTypeSource::UnsizeTo);
                             return ;
                         }
