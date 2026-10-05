@@ -20,7 +20,7 @@ extern int g_debug_indent_level;
 
 #ifndef DISABLE_DEBUG
 // Note: Set for `curl-sys-0_4_82` build script, which has a log chain of method calls
-# define MAX_INDENT_LEVEL   450
+# define MAX_INDENT_LEVEL   1000
 # define INDENT()    do { g_debug_indent_level += 1; assert(g_debug_indent_level<MAX_INDENT_LEVEL); } while(0)
 # define UNINDENT()    do { g_debug_indent_level -= 1; } while(0)
 # define DEBUG_ENABLED  (debug_enabled() DEBUG_EXTRA_ENABLE)
