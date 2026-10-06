@@ -209,13 +209,13 @@ public:
         , m_client(m_server.get_client_read_fd(), m_server.get_client_write_fd())
     {
         ::std::stringstream ss;
-        if(const auto* makeflags = getenv("MAKEFLAGS"))
-        {
-            ss << makeflags << " ";
-        }
-        ss << "--jobserver-auth=";
+        ss << " --jobserver-auth=";
         m_server.dump_desc(ss);
-        setenv("MAKEFLAGS", ss.str().c_str(), /*overwrite=*/1);
+        // Words after ` -- ` are variable assignments, so a make spawned by gcc's lto-wrapper would ignore the flag there
+        ::std::string flags = getenv("MAKEFLAGS") ? getenv("MAKEFLAGS") : "";
+        auto vars = flags.find(" -- ");
+        flags.insert(vars == ::std::string::npos ? flags.size() : vars, ss.str());
+        setenv("MAKEFLAGS", flags.c_str(), /*overwrite=*/1);
     }
     ~JobServer_Server()
     {
