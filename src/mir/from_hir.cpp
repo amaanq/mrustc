@@ -2510,7 +2510,7 @@ namespace {
                 }
 
                 // rustc has drop_in_place as a lang item, mrustc uses an intrinsic
-                if( gpath.m_path == m_builder.crate().get_lang_item_path_opt("drop_in_place") )
+                if( gpath.m_path == m_builder.crate().get_lang_item_path_opt("drop_in_place") || gpath.m_path == m_builder.crate().get_lang_item_path_opt("drop_glue") )
                 {
                     m_builder.end_block(::MIR::Terminator::make_Call({
                         next_block, panic_block,

@@ -281,6 +281,19 @@ void handle_lang_item(const Span& sp, AST::Crate& crate, const AST::AbsolutePath
             H::add("type_info", Handler(ITEM_STRUCT, handle_save));    // ::core::mem::type_info::Type
             H::add("RangeToInclusiveCopy", Handler(ITEM_STRUCT, handle_save)); // ::core::range::RangeToInclusive
         }
+        if( TARGETVER_LEAST_1_98 )
+        {
+            H::add("drop_glue", Handler(ITEM_FN, handle_save));
+            H::add("From", Handler(ITEM_TRAIT, handle_save));
+            H::add("va_arg_safe", Handler(ITEM_TRAIT, handle_save));
+
+            H::add("memcpy_fn", Handler(ITEM_EXTERN_FN, handle_save));
+            H::add("memmove_fn", Handler(ITEM_EXTERN_FN, handle_save));
+            H::add("memset_fn", Handler(ITEM_EXTERN_FN, handle_save));
+            H::add("memcmp_fn", Handler(ITEM_EXTERN_FN, handle_save));
+            H::add("bcmp_fn", Handler(ITEM_EXTERN_FN, handle_save));
+            H::add("strlen_fn", Handler(ITEM_EXTERN_FN, handle_save));
+        }
     }
     const char* real_name = nullptr;    // For when lang items have their name changed
     auto it = g_handlers.find(name.c_str());
