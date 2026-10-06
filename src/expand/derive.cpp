@@ -6,6 +6,7 @@
  * - Support for the `#[derive]` attribute
  */
 #include <synext.hpp>
+#include <target_version.hpp>
 #include "../common.hpp"
 #include "../ast/ast.hpp"
 #include "../ast/expr.hpp"
@@ -1454,9 +1455,10 @@ public:
             AST::Pattern    pat_a;
 
             auto var_path = base_path + v.m_name;
-            auto var_idx_hash = enm.variants().size() > 1
-                ?  this->hash_val_ref( opts.core_name, NEWNODE(Integer, U128(var_idx), CORETYPE_UINT) )
-                : NEWNODE(Tuple, {})
+            // rustc's builtin derive hashes `discriminant_value`, an `isize` unless the enum has a `repr`
+            auto var_idx_hash = enm.variants().size() <= 1 ? NEWNODE(Tuple, {})
+                : TARGETVER_LEAST_1_29 ? this->hash_val_ref( opts.core_name, NEWNODE(CallPath, get_path(opts.core_name, "mem", "discriminant"), vec$( NEWNODE(NamedValue, AST::Path(rcstring_self)) )) )
+                : this->hash_val_ref( opts.core_name, NEWNODE(Integer, U128(var_idx), CORETYPE_UINT) )
                 ;
 
             auto block = new_block(sp);
