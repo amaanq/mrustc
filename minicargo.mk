@@ -276,6 +276,7 @@ $(RUSTCSRC)mrustc-stdlib/Cargo.toml: $(RUSTC_SRC_DL) minicargo.mk
 	@echo "rustc-std-workspace-core = { path = \"../$(RUST_LIB_PREFIX)rustc-std-workspace-core\" }" >> $@
 	@echo "rustc-std-workspace-alloc = { path = \"../$(RUST_LIB_PREFIX)rustc-std-workspace-alloc\" }" >> $@
 	@echo "rustc-std-workspace-std = { path = \"../$(RUST_LIB_PREFIX)rustc-std-workspace-std\" }" >> $@
+	@if [ -f $(RUSTCSRC)$(RUST_LIB_PREFIX)Cargo.lock ]; then printf "[workspace]\nmembers = []\n" >> $@; cp $(RUSTCSRC)$(RUST_LIB_PREFIX)Cargo.lock $(dir $@); fi
 LIBS: $(RUSTCSRC)mrustc-stdlib/Cargo.toml $(MRUSTC) $(MINICARGO)
 	+STD_ENV_ARCH=$(RUSTC_ARCH) $(MINICARGO) --vendor-dir $(VENDOR_DIR) --script-overrides $(OVERRIDE_DIR) --output-dir $(OUTDIR) $(MINICARGO_FLAGS) $(RUSTCSRC)mrustc-stdlib/
 	+$(MINICARGO) --output-dir $(OUTDIR) $(MINICARGO_FLAGS) lib/libproc_macro
