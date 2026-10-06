@@ -1924,12 +1924,14 @@ namespace {
             RcString::new_interned("Output"),
             ::HIR::TraitPath::AtyEqual { future_path.m_path.clone(), {}, std::move(rv.m_return) }
         ));
-        rv.m_return = ::HIR::TypeRef(::HIR::TypeData::make_ErasedType(::HIR::TypeData_ErasedType {
+        auto erased = ::HIR::TypeData_ErasedType {
             true,
             ::make_vec1(std::move(future_path)),
             {},
             ::HIR::TypeData_ErasedType_Inner::Data_Fcn { ::HIR::Path(::HIR::SimplePath()), 0 }
-        }));
+        };
+        erased.m_use_present = ::HIR::TypeData_ErasedType::Use::Omitted2024;
+        rv.m_return = ::HIR::TypeRef(::HIR::TypeData::make_ErasedType(std::move(erased)));
     }
 
     return rv;
