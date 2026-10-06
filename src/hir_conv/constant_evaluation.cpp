@@ -30,27 +30,32 @@ namespace {
 
     using HIR::Defer;
 
+    /// Statics may be added to another crate's module, so names carry the crate being compiled to stay distinct from its siblings'
+    ::std::string const_static_prefix(const ::HIR::Crate& crate)
+    {
+        ::std::string rv = "const_";
+        for(char c : ::std::string(crate.m_crate_name.c_str()))
+            rv += (isalnum(static_cast<unsigned char>(c)) ? c : '_');
+        return rv + "#";
+    }
     struct NewvalState
         : public HIR::Evaluator::Newval
     {
         const ::HIR::Module&   mod;
         const ::HIR::ItemPath&  mod_path;
         ::std::string   name_prefix;
-        unsigned int next_item_idx;
 
         NewvalState(const ::HIR::Module& mod, const ::HIR::ItemPath& mod_path, ::std::string prefix):
             mod(mod),
             mod_path(mod_path),
-            name_prefix(prefix),
-            next_item_idx(0)
+            name_prefix(prefix)
         {
         }
 
         ::HIR::Path new_static(::HIR::TypeRef type, EncodedLiteral value) override
         {
             ASSERT_BUG(Span(), type != HIR::TypeRef(), "");
-            auto name = RcString::new_interned(FMT(name_prefix << next_item_idx));
-            next_item_idx ++;
+            auto name = RcString::new_interned(FMT(name_prefix << mod.m_inline_statics.size()));
             auto rv = mod_path.get_simple_path() + name.c_str();
             auto s = ::HIR::Static( ::HIR::Linkage(), false, mv$(type), ::HIR::ExprPtr() );
             s.m_value_res = ::std::move(value);
@@ -1325,7 +1330,7 @@ namespace MIR { namespace eval {
                 auto& item = const_cast<::HIR::Constant&>(c);
                 // Challenge: Adding items to the module might invalidate an iterator.
                 ::HIR::ItemPath mod_ip { item.m_value.m_state->m_mod_path };
-                auto nvs = NewvalState(item.m_value.m_state->m_module, mod_ip, FMT("const" << &c << "#"));
+                auto nvs = NewvalState(item.m_value.m_state->m_module, mod_ip, const_static_prefix(root_resolve.m_crate));
                 auto eval = ::HIR::Evaluator(item.m_value.span(), root_resolve.m_crate, nvs);
                 eval.resolve.set_both_generics_raw(impl_params_def, &c.m_params);
                 auto temp_pp_impl = impl_params_def ? impl_params_def->make_nop_params(0) : HIR::PathParams();
@@ -1356,7 +1361,7 @@ namespace MIR { namespace eval {
                     auto& item = const_cast<::HIR::Constant&>(c);
                     // Challenge: Adding items to the module might invalidate an iterator.
                     ::HIR::ItemPath mod_ip { item.m_value.m_state->m_mod_path };
-                    auto nvs = NewvalState(item.m_value.m_state->m_module, mod_ip, FMT("const" << &c << "#"));
+                    auto nvs = NewvalState(item.m_value.m_state->m_module, mod_ip, const_static_prefix(root_resolve.m_crate));
                     auto eval = ::HIR::Evaluator(item.m_value.span(), root_resolve.m_crate, nvs);
                     eval.resolve.set_both_generics_raw(impl_params_def, &c.m_params);
 
