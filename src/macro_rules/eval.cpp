@@ -1222,6 +1222,25 @@ namespace
                     return false;
                 }
             }
+            else if( lex.consume_if(TOK_DOUBLE_DOT) )
+            {
+                switch(lex.next())
+                {
+                case TOK_IDENT:
+                case TOK_RWORD_SUPER:
+                case TOK_RWORD_SELF:
+                case TOK_DOUBLE_COLON:
+                case TOK_INTERPOLATED_PATH:
+                    consume_path(lex);
+                    break;
+                case TOK_INTEGER:
+                case TOK_FLOAT:
+                    lex.consume();
+                    break;
+                default:
+                    break;
+                }
+            }
             if(allow_or && lex.consume_if(TOK_PIPE))
                 continue;
             return true;
