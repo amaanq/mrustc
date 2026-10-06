@@ -35,7 +35,14 @@
 #define HOST_TARGET DEFAULT_TARGET_NAME
 
 bool deferred_codegen_enabled() {
-    return getenv("MINICARGO_DEFER_CODEGEN") != 0;
+    static const bool enabled = [] {
+        const char* v = getenv("MINICARGO_DEFER_CODEGEN");
+        if( v && ::std::strcmp(v, "0") == 0 )
+            return false;
+        auto compiler = os_support::get_mrustc_path().basename();
+        return compiler != "rustc" && compiler != "rustc.exe";
+    }();
+    return enabled;
 }
 
 static bool has_suffix(const ::std::string& s, const char* suffix) {
