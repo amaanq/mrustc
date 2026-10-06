@@ -315,6 +315,14 @@ LockfileContents ResolveDependencies_Cargo(Repository& repo, const PackageManife
             continue ;
         }
 
+        // Cargo.lock pins every package the workspace can need, so a dependency it has no matching version for is another crate's unused optional or dev dependency
+        if( state.policy.locked && !state.policy.locked->empty() && dep_spec.package_name.compare(0, 20, "rustc-std-workspace-") != 0 ) {
+            auto it = state.policy.locked->find(dep_spec.package_name);
+            if( it == state.policy.locked->end() || ::std::none_of(it->second.begin(), it->second.end(), [&](const PackageVersion& v){ return dep_spec.version_spec.accepts(v); }) ) {
+                DEBUG("Not in Cargo.lock: skip");
+                continue ;
+            }
+        }
         // Get possible versions matching this spec
         auto avail_versions = repo.enum_matching_versions(dep_spec.package_name, dep_spec.version_spec);
         if( avail_versions.empty() ) {
