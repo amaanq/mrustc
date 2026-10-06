@@ -800,6 +800,27 @@ void Trans_Enumerate_Cleanup(const ::HIR::Crate& crate, TransList& list)
 
     remove_missing(list.m_functions, new_list.m_functions);
     remove_missing(list.m_statics  , new_list.m_statics  );
+
+    // Inlining can introduce local types that the first enumeration never saw
+    {
+        struct Cmp { bool operator()(const HIR::TypeRef* a, const HIR::TypeRef* b) const { return *a < *b; } };
+        std::map<const HIR::TypeRef*, bool, Cmp>  known;
+        for(const auto& t : list.m_types) {
+            auto it = known.insert(std::make_pair(&t.first, t.second)).first;
+            it->second &= t.second;
+        }
+        std::vector< std::pair<HIR::TypeRef, bool> >    added;
+        for(auto& t : new_list.m_types)
+        {
+            auto it = known.find(&t.first);
+            if( it == known.end() || (it->second && !t.second) ) {
+                DEBUG("++ type " << t.first);
+                added.push_back(std::move(t));
+            }
+        }
+        for(auto& t : added)
+            list.m_types.push_back(std::move(t));
+    }
 #endif
 }
 
