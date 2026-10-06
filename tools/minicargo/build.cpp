@@ -416,6 +416,9 @@ bool BuildList::build(BuildOptions opts, unsigned num_jobs, bool dry_run)
                 return output_ts < it->second;
             }
         }
+        bool is_built(const std::string& k) const {
+            return items_built.count(k) != 0;
+        }
         void add_job(::std::unique_ptr<Job> job, Timestamp ts, bool is_needed) {
             if(is_needed) {
                 DEBUG("Dirty " << job->name());
@@ -459,6 +462,10 @@ bool BuildList::build(BuildOptions opts, unsigned num_jobs, bool dry_run)
                             auto k = run_state.get_key(dep.get_package(), false, /*is_host=*/true);
                             DEBUG("BS Dep: " << k);
                             bs_is_dirty |= this->handle_dep(job_bs_build->m_dependencies, script_ts, k);
+                            const auto& dp = dep.get_package();
+                            if( deferred_codegen_enabled() && dp.has_library() && !dp.get_library().m_is_proc_macro ) {
+                                this->handle_dep(job_bs_build->m_dependencies, script_ts, k + " (codegen)");
+                            }
                         }
                     });
                     auto name_bs_build = job_bs_build->name();
@@ -549,6 +556,7 @@ bool BuildList::build(BuildOptions opts, unsigned num_jobs, bool dry_run)
             is_dirty = true;
         }
         // Check dependencies
+        std::vector<std::string>    rebuilt_codegen_deps;
         p.iter_main_dependencies([&](const PackageRef& dep) {
             if( !dep.is_disabled() )
             {
@@ -556,24 +564,48 @@ bool BuildList::build(BuildOptions opts, unsigned num_jobs, bool dry_run)
                 DEBUG("Dep " << k);
                 is_dirty |= convert_state.handle_dep(job->m_dependencies, output_ts, k);
                 use_plugin_codegen(job->m_dependencies, k, dep);
+                const auto& dp = dep.get_package();
+                if( deferred_codegen_enabled() && dp.has_library() && !dp.get_library().m_is_proc_macro && convert_state.is_built(k + " (codegen)") ) {
+                    rebuilt_codegen_deps.push_back(k + " (codegen)");
+                    // mrustc links a proc-macro's dependencies itself, which needs their objects and not just their rlibs
+                    if( p.get_library().m_is_proc_macro ) {
+                        job->m_dependencies.push_back(k + " (codegen)");
+                    }
+                }
             }
         });
+        ::std::unique_ptr<Job_Codegen>  job_codegen;
+        if( job->get_codegen() != helpers::path() )
+        {
+            job_codegen = ::std::make_unique<Job_Codegen>(run_state, job->name(), job->get_outfile(), job->get_codegen());
+            // An interrupted run can leave the rlib without its object, and only mrustc can recreate a missing codegen script
+            if( run_state.outfile_needs_rebuild(job_codegen->get_outfile()) && Timestamp::for_file(job->get_codegen()) == Timestamp::infinite_past() )
+                is_dirty = true;
+        }
         job->m_is_dirty = is_dirty;
         auto job_p = job.get();
         convert_state.add_job(std::move(job), output_ts, is_dirty);
 
         // If deferring codegen, add a new job for running the codegen backend
-        if( job_p->get_codegen() != helpers::path() )
+        if( job_codegen )
         {
             // TODO: Codegen should re-run if the output file from it is missing
-            auto job_codegen = ::std::make_unique<Job_Codegen>(run_state, job_p->name(), job_p->get_outfile(), job_p->get_codegen());
-            job_codegen->m_is_dirty = is_dirty || run_state.outfile_needs_rebuild(job_codegen->get_outfile());
+            // A rebuilt dependency object must be linked before anything that links this one, so rerunning this codegen carries the ordering to transitive dependents
+            job_codegen->m_is_dirty = is_dirty || run_state.outfile_needs_rebuild(job_codegen->get_outfile()) || !rebuilt_codegen_deps.empty();
+            if( !is_dirty ) {
+                job_codegen->m_dependencies.clear();
+            }
+            bool codegen_dirty = job_codegen->m_is_dirty;
             auto job_codegen_p = job_codegen.get();
-            convert_state.add_job(std::move(job_codegen), output_ts, is_dirty);
+            convert_state.add_job(std::move(job_codegen), output_ts, codegen_dirty);
             // HACK: Ensure that the dependencies for this job all are for codegen
             for(auto d : job_p->m_dependencies) {
                 make_dep_codegen(d);
                 job_codegen_p->m_dependencies.push_back(std::move(d));
+            }
+            for(auto& d : rebuilt_codegen_deps) {
+                if( ::std::find(job_codegen_p->m_dependencies.begin(), job_codegen_p->m_dependencies.end(), d) == job_codegen_p->m_dependencies.end() )
+                    job_codegen_p->m_dependencies.push_back(d);
             }
         }
     }
@@ -604,16 +636,26 @@ bool BuildList::build(BuildOptions opts, unsigned num_jobs, bool dry_run)
                 }
             });
         }
+        ::std::unique_ptr<Job_Codegen>  job_codegen;
+        if( job->get_codegen() != helpers::path() )
+        {
+            job_codegen = ::std::make_unique<Job_Codegen>(run_state, job->name(), job->get_outfile(), job->get_codegen());
+            if( run_state.outfile_needs_rebuild(job_codegen->get_outfile()) && Timestamp::for_file(job->get_codegen()) == Timestamp::infinite_past() )
+                is_dirty = true;
+        }
         job->m_is_dirty = is_dirty;
 
         // If deferring codegen, add a new job for running the codegen backend
-        if( job->get_codegen() != helpers::path() )
+        if( job_codegen )
         {
             // TODO: Codegen should re-run if the output file from it is missing
-            auto job_codegen = ::std::make_unique<Job_Codegen>(run_state, job->name(), job->get_outfile(), job->get_codegen());
             job_codegen->m_is_dirty = is_dirty || run_state.outfile_needs_rebuild(job_codegen->get_outfile());
+            if( !is_dirty ) {
+                job_codegen->m_dependencies.clear();
+            }
+            bool codegen_dirty = job_codegen->m_is_dirty;
             auto job_codegen_p = job_codegen.get();
-            convert_state.add_job(std::move(job_codegen), output_ts, is_dirty);
+            convert_state.add_job(std::move(job_codegen), output_ts, codegen_dirty);
             // HACK: Ensure that the dependencies for this job all are for codegen
             for(auto d : job->m_dependencies) {
                 make_dep_codegen(d);
