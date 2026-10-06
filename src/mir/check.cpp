@@ -366,9 +366,21 @@ void MIR_Validate_ValState(::MIR::TypeResolve& state, const ::MIR::Function& fcn
             bool rv = false;
             assert( a.size() == b.size() );
             // TODO: This is a really hot bit of code (according to valgrind), need to find a way of cooling it
-            for(unsigned int i = 0; i < a.size(); i++)
+            const uint8_t either = State::Either | (State::Either << 2) | (State::Either << 4) | (State::Either << 6);
+            for(size_t i = 0; i < a.v.size(); i++)
             {
-                rv |= merge_state(a[i].get(), b[i].get());
+                uint8_t x = a.v[i];
+                uint8_t y = b.v[i];
+                uint8_t diff = x ^ y;
+                if( diff == 0 )
+                    continue;
+                uint8_t lanes = (diff | (diff >> 1)) & 0x55;
+                uint8_t not_either = ((x ^ either) | ((x ^ either) >> 1)) & 0x55;
+                rv |= (lanes & not_either) != 0;
+                uint8_t mask = lanes | (lanes << 1);
+                x = (x & ~mask) | (either & mask);
+                a.v[i] = x;
+                b.v[i] = x;
             }
             return rv;
         }
@@ -385,15 +397,18 @@ void MIR_Validate_ValState(::MIR::TypeResolve& state, const ::MIR::Function& fcn
 
     // TODO: Check that all used locals are also set (anywhere at all)
 
+    ::std::vector<unsigned int> queued_count( fcn.blocks.size() );
     auto add_to_visit = [&](unsigned int idx, ::std::vector<unsigned int> src_path, ValStates& vs, bool can_move) {
-        for(const auto& b : to_visit_blocks)
-            if( b.bb == idx && b.state == vs)
-                return ;
+        if( queued_count[idx] > 0 )
+            for(const auto& b : to_visit_blocks)
+                if( b.bb == idx && b.state == vs)
+                    return ;
         if( block_start_states.at(idx) == vs )
             return ;
         src_path.push_back(idx);
         // TODO: Update the target block, and only visit if we've induced a change
         to_visit_blocks.push_back( ToVisit { idx, mv$(src_path), (can_move ? mv$(vs) : ValStates(vs)) } );
+        queued_count[idx] += 1;
         };
     auto add_to_visit_move = [&](unsigned int idx, ::std::vector<unsigned int> src_path, ValStates vs) {
         add_to_visit(idx, mv$(src_path), vs, true);
@@ -409,6 +424,7 @@ void MIR_Validate_ValState(::MIR::TypeResolve& state, const ::MIR::Function& fcn
         auto val_state = mv$( to_visit_blocks.back().state );
         to_visit_blocks.pop_back();
         assert(block < fcn.blocks.size());
+        queued_count[block] -= 1;
 
         // 1. Apply current state to `block_start_states` (merging if needed)
         // - If no change happened, skip.
