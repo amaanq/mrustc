@@ -1,0 +1,428 @@
+--- compiler/rustc_errors/src/lib.rs
++++ compiler/rustc_errors/src/lib.rs
+@@ -87,6 +87,7 @@
+ // `PResult` is used a lot. Make sure it doesn't unintentionally get bigger.
+ #[cfg(target_pointer_width = "64")]
+ rustc_data_structures::static_assert_size!(PResult<'_, ()>, 24);
++#[cfg(not(rust_compiler="mrustc"))]
+ #[cfg(target_pointer_width = "64")]
+ rustc_data_structures::static_assert_size!(PResult<'_, bool>, 24);
+ 
+--- compiler/rustc_hir/src/hir.rs
++++ compiler/rustc_hir/src/hir.rs
+@@ -5137,6 +5137,7 @@
+ }
+ 
+ // Some nodes are used a lot. Make sure they don't unintentionally get bigger.
++#[cfg(not(rust_compiler="mrustc"))]
+ #[cfg(target_pointer_width = "64")]
+ mod size_asserts {
+     use rustc_data_structures::static_assert_size;
+--- compiler/rustc_index_macros/src/newtype.rs
++++ compiler/rustc_index_macros/src/newtype.rs
+@@ -196,10 +196,11 @@
+             #(#attrs)*
+             #[derive(Clone, Copy)]
+             #[cfg_attr(#gate_rustc_only_cfg, rustc_pass_by_value)]
++            #[cfg_attr(all(#gate_rustc_only_cfg, rust_compiler = "mrustc"), rustc_layout_scalar_valid_range_end(#max))]
+             #vis struct #name {
+-                #[cfg(not(#gate_rustc_only_cfg))]
++                #[cfg(any(not(#gate_rustc_only_cfg), rust_compiler = "mrustc"))]
+                 private_use_as_methods_instead: u32,
+-                #[cfg(#gate_rustc_only_cfg)]
++                #[cfg(all(#gate_rustc_only_cfg, not(rust_compiler = "mrustc")))]
+                 private_use_as_methods_instead: pattern_type!(u32 is 0..=#max),
+             }
+ 
+--- compiler/rustc_index/src/lib.rs
++++ compiler/rustc_index/src/lib.rs
+@@ -37,7 +37,7 @@
+ ///
+ /// </div>
+ #[macro_export]
+-#[cfg(not(feature = "rustc_randomized_layouts"))]
++#[cfg(not(any(feature = "rustc_randomized_layouts", rust_compiler = "mrustc")))]
+ macro_rules! static_assert_size {
+     ($ty:ty, $size:expr) => {
+         const _: [(); $size] = [(); ::std::mem::size_of::<$ty>()];
+@@ -45,7 +45,7 @@
+ }
+ 
+ #[macro_export]
+-#[cfg(feature = "rustc_randomized_layouts")]
++#[cfg(any(feature = "rustc_randomized_layouts", rust_compiler = "mrustc"))]
+ macro_rules! static_assert_size {
+     ($ty:ty, $size:expr) => {
+         // no effect other than using the statements.
+--- compiler/rustc_middle/src/ty/generic_args.rs
++++ compiler/rustc_middle/src/ty/generic_args.rs
+@@ -707,7 +707,7 @@
+ impl<'tcx, T: TypeVisitable<TyCtxt<'tcx>>> TypeVisitable<TyCtxt<'tcx>> for &'tcx ty::List<T> {
+     #[inline]
+     fn visit_with<V: TypeVisitor<TyCtxt<'tcx>>>(&self, visitor: &mut V) -> V::Result {
+-        walk_visitable_list!(visitor, self.iter());
++        walk_visitable_list!(visitor, (***self).iter());
+         V::Result::output()
+     }
+ }
+--- compiler/rustc_middle/src/ty/sty.rs
++++ compiler/rustc_middle/src/ty/sty.rs
+@@ -2139,7 +2139,7 @@
+ 
+ impl<'tcx> rustc_type_ir::inherent::Tys<TyCtxt<'tcx>> for &'tcx ty::List<Ty<'tcx>> {
+     fn inputs(self) -> &'tcx [Ty<'tcx>] {
+-        self.split_last().unwrap().1
++        (**self).split_last().unwrap().1
+     }
+ 
+     fn output(self) -> Ty<'tcx> {
+--- compiler/rustc_parse/src/parser/mod.rs
++++ compiler/rustc_parse/src/parser/mod.rs
+@@ -245,6 +245,7 @@
+ // This type is used a lot, e.g. it's cloned when matching many declarative macro rules with
+ // nonterminals. Make sure it doesn't unintentionally get bigger. We only check a few arches
+ // though, because `TokenTypeSet(u128)` alignment varies on others, changing the total size.
++#[cfg(not(rust_compiler="mrustc"))]
+ #[cfg(all(target_pointer_width = "64", any(target_arch = "aarch64", target_arch = "x86_64")))]
+ rustc_data_structures::static_assert_size!(Parser<'_>, 288);
+ 
+--- compiler/rustc_query_impl/src/plumbing.rs
++++ compiler/rustc_query_impl/src/plumbing.rs
+@@ -76,9 +76,13 @@
+ }
+ 
+ pub(crate) fn encode_query_values<'tcx>(tcx: TyCtxt<'tcx>, encoder: &mut CacheEncoder<'_, 'tcx>) {
++    #[cfg(not(rust_compiler = "mrustc"))]
+     for_each_query_vtable!(CACHE_ON_DISK, tcx, |query| {
+         encode_query_values_inner(tcx, query, encoder)
+     });
++    // mrustc expands `Erased<V>` before this crate sees it, so `V` can't be inferred from `C::Value`
++    #[cfg(rust_compiler = "mrustc")]
++    for_each_query_vtable!(CACHE_ON_DISK_VALUE, tcx, encode_query_values_inner, encoder);
+ }
+ 
+ fn encode_query_values_inner<'a, 'tcx, C, V>(
+--- compiler/rustc_query_impl/src/query_impl.rs
++++ compiler/rustc_query_impl/src/query_impl.rs
+@@ -187,12 +187,12 @@
+                         hash_value_fn: None,
+                         #[cfg(not($no_hash))]
+                         hash_value_fn: Some(|hcx, erased_value: &erase::Erased<Value<'tcx>>| {
+-                            let value = erase::restore_val(*erased_value);
++                            let value = erase::restore_val::<Value<'tcx>>(*erased_value);
+                             rustc_middle::dep_graph::hash_result(hcx, &value)
+                         }),
+ 
+                         format_value: |erased_value: &erase::Erased<Value<'tcx>>| {
+-                            format!("{:?}", erase::restore_val(*erased_value))
++                            format!("{:?}", erase::restore_val::<Value<'tcx>>(*erased_value))
+                         },
+                         create_tagged_key: TaggedQueryKey::$name,
+                         execute_query_fn: if incremental {
+@@ -252,6 +252,17 @@
+                 )*
+             }};
+ 
++            (CACHE_ON_DISK_VALUE, $tcx:expr, $f:ident, $encoder:expr) => {{
++                let tcx: rustc_middle::ty::TyCtxt<'_> = $tcx;
++                $(
++                    #[cfg($cache_on_disk)]
++                    {
++                        let query = &tcx.query_system.query_vtables.$name;
++                        $f::<_, rustc_middle::queries::$name::Value<'_>>(tcx, query, $encoder);
++                    }
++                )*
++            }};
++
+             // Only call with queries that can potentially cache to disk.
+             //
+             // This allows the use of trait bounds that only need to be satisfied
+--- library/compiler-builtins/compiler-builtins/src/probestack.rs
++++ library/compiler-builtins/compiler-builtins/src/probestack.rs
+@@ -42,6 +42,8 @@
+ //! be more than welcome to accept such a change!
+ 
+ #![cfg(feature = "unmangled-names")]
++// All these builtins require assembly
++#![cfg(not(feature = "no-asm"))]
+ // Windows and Cygwin already has builtins to do this.
+ #![cfg(not(any(windows, target_os = "cygwin")))]
+ // We only define stack probing for these architectures today.
+--- library/core/src/num/niche_types.rs
++++ library/core/src/num/niche_types.rs
+@@ -7,45 +7,57 @@
+ use crate::cmp::Ordering;
+ use crate::hash::{Hash, Hasher};
+ use crate::marker::StructuralPartialEq;
+-use crate::{fmt, pattern_type};
++use crate::fmt;
+ 
+ macro_rules! define_valid_range_type {
+     ($(
+         $(#[$m:meta])*
+-        $vis:vis struct $name:ident($int:ident is $pat:pat);
++        $vis:vis struct $name:ident($int:ident as $uint:ident in $low:literal..=$high:literal);
+     )+) => {$(
+-        #[derive(Clone, Copy)]
++        #[derive(Clone, Copy, Eq)]
+         #[repr(transparent)]
++        #[rustc_layout_scalar_valid_range_start($low)]
++        #[rustc_layout_scalar_valid_range_end($high)]
+         $(#[$m])*
+-        $vis struct $name(pattern_type!($int is $pat));
++        $vis struct $name($int);
++
++        const _: () = {
++            // With the `valid_range` attributes, it's always specified as unsigned
++            assert!(<$uint>::MIN == 0);
++            let ulow: $uint = $low;
++            let uhigh: $uint = $high;
++            assert!(ulow <= uhigh);
++
++            assert!(size_of::<$int>() == size_of::<$uint>());
++        };
++
+         impl $name {
+             #[inline]
+             pub const fn new(val: $int) -> Option<Self> {
+-                #[allow(non_contiguous_range_endpoints)]
+-                if let $pat = val {
+-                    // SAFETY: just checked that the value matches the pattern
+-                    Some(unsafe { $name(crate::mem::transmute(val)) })
++                if (val as $uint) >= ($low as $uint) && (val as $uint) <= ($high as $uint) {
++                    // SAFETY: just checked the inclusive range
++                    Some(unsafe { $name(val) })
+                 } else {
+                     None
+                 }
+             }
+ 
+             /// Constructs an instance of this type from the underlying integer
+-            /// primitive without checking whether its valid.
++            /// primitive without checking whether its zero.
+             ///
+             /// # Safety
+-            /// Immediate language UB if `val` is not within the valid range for this
+-            /// type, as it violates the validity invariant.
++            /// Immediate language UB if `val == 0`, as it violates the validity
++            /// invariant of this type.
+             #[inline]
+             pub const unsafe fn new_unchecked(val: $int) -> Self {
+-                // SAFETY: Caller promised that `val` is within the valid range.
+-                unsafe { crate::mem::transmute(val) }
++                // SAFETY: Caller promised that `val` is non-zero.
++                unsafe { $name(val) }
+             }
+ 
+             #[inline]
+             pub const fn as_inner(self) -> $int {
+-                // SAFETY: pattern types are always legal values of their base type
+-                // (Not using `.0` because that has perf regressions.)
++                // SAFETY: This is a transparent wrapper, so unwrapping it is sound
++                // (Not using `.0` due to MCP#807.)
+                 unsafe { crate::mem::transmute(self) }
+             }
+         }
+@@ -55,8 +67,6 @@
+         // by <https://github.com/rust-lang/compiler-team/issues/807>.
+         impl StructuralPartialEq for $name {}
+ 
+-        impl Eq for $name {}
+-
+         impl PartialEq for $name {
+             #[inline]
+             fn eq(&self, other: &Self) -> bool {
+@@ -94,7 +104,7 @@
+ }
+ 
+ define_valid_range_type! {
+-    pub struct Nanoseconds(u32 is 0..=999_999_999);
++    pub struct Nanoseconds(u32 as u32 in 0..=999_999_999);
+ }
+ 
+ impl Nanoseconds {
+@@ -110,32 +120,30 @@
+     }
+ }
+ 
+-const HALF_USIZE: usize = usize::MAX >> 1;
+-
+ define_valid_range_type! {
+-    pub struct NonZeroU8Inner(u8 is 1..);
+-    pub struct NonZeroU16Inner(u16 is 1..);
+-    pub struct NonZeroU32Inner(u32 is 1..);
+-    pub struct NonZeroU64Inner(u64 is 1..);
+-    pub struct NonZeroU128Inner(u128 is 1..);
+-
+-    pub struct NonZeroI8Inner(i8 is ..0 | 1..);
+-    pub struct NonZeroI16Inner(i16 is ..0 | 1..);
+-    pub struct NonZeroI32Inner(i32 is ..0 | 1..);
+-    pub struct NonZeroI64Inner(i64 is ..0 | 1..);
+-    pub struct NonZeroI128Inner(i128 is ..0 | 1..);
+-
+-    pub struct UsizeNoHighBit(usize is 0..=HALF_USIZE);
+-    pub struct NonZeroUsizeInner(usize is 1..);
+-    pub struct NonZeroIsizeInner(isize is ..0 | 1..);
++    pub struct NonZeroU8Inner(u8 as u8 in 1..=0xff);
++    pub struct NonZeroU16Inner(u16 as u16 in 1..=0xff_ff);
++    pub struct NonZeroU32Inner(u32 as u32 in 1..=0xffff_ffff);
++    pub struct NonZeroU64Inner(u64 as u64 in 1..=0xffffffff_ffffffff);
++    pub struct NonZeroU128Inner(u128 as u128 in 1..=0xffffffffffffffff_ffffffffffffffff);
++
++    pub struct NonZeroI8Inner(i8 as u8 in 1..=0xff);
++    pub struct NonZeroI16Inner(i16 as u16 in 1..=0xff_ff);
++    pub struct NonZeroI32Inner(i32 as u32 in 1..=0xffff_ffff);
++    pub struct NonZeroI64Inner(i64 as u64 in 1..=0xffffffff_ffffffff);
++    pub struct NonZeroI128Inner(i128 as u128 in 1..=0xffffffffffffffff_ffffffffffffffff);
++
++    pub struct UsizeNoHighBit(usize as usize in 0..=0x7fff_ffff_ffff_ffff);
++    pub struct NonZeroUsizeInner(usize as usize in 1..=0xffff_ffff_ffff_ffff);
++    pub struct NonZeroIsizeInner(isize as usize in 1..=0xffff_ffff_ffff_ffff);
+ 
+-    pub struct U32NotAllOnes(u32 is 0..u32::MAX);
+-    pub struct I32NotAllOnes(i32 is ..-1 | 0..);
++    pub struct U32NotAllOnes(u32 as u32 in 0..=0xffff_fffe);
++    pub struct I32NotAllOnes(i32 as u32 in 0..=0xffff_fffe);
+ 
+-    pub struct U64NotAllOnes(u64 is 0..u64::MAX);
+-    pub struct I64NotAllOnes(i64 is ..-1 | 0..);
++    pub struct U64NotAllOnes(u64 as u64 in 0..=0xffff_ffff_ffff_fffe);
++    pub struct I64NotAllOnes(i64 as u64 in 0..=0xffff_ffff_ffff_fffe);
+ 
+-    pub struct NonZeroCharInner(char is '\u{1}' ..= '\u{10ffff}');
++    pub struct NonZeroCharInner(char as u32 in 1..=0x10ffff);
+ }
+ 
+ pub trait NotAllOnesHelper {
+@@ -156,7 +164,7 @@
+ }
+ 
+ define_valid_range_type! {
+-    pub struct CodePointInner(u32 is 0..=0x10ffff);
++    pub struct CodePointInner(u32 as u32 in 0..=0x10ffff);
+ }
+ 
+ impl CodePointInner {
+--- library/core/src/pat.rs
++++ library/core/src/pat.rs
+@@ -77,15 +77,20 @@
+     }
+ }
+ 
++#[cfg(not(rust_compiler = "mrustc"))]
+ impl<T: PointeeSized, U: PointeeSized> CoerceUnsized<pattern_type!(*const U is !null)> for pattern_type!(*const T is !null) where
+     T: Unsize<U>
+ {
+ }
+ 
++#[cfg(not(rust_compiler = "mrustc"))]
+ impl<T: DispatchFromDyn<U>, U> DispatchFromDyn<pattern_type!(U is !null)> for pattern_type!(T is !null) {}
+ 
++#[cfg(not(rust_compiler = "mrustc"))]
+ impl<T: PointeeSized> Unpin for pattern_type!(*const T is !null) {}
+ 
++#[cfg(not(rust_compiler = "mrustc"))]
+ unsafe impl<T: PointeeSized> Freeze for pattern_type!(*const T is !null) {}
+ 
++#[cfg(not(rust_compiler = "mrustc"))]
+ unsafe impl<T: PointeeSized> Freeze for pattern_type!(*mut T is !null) {}
+--- library/core/src/pin.rs
++++ library/core/src/pin.rs
+@@ -2025,6 +2025,7 @@
+ #[rustc_diagnostic_item = "pin_macro"]
+ // `super` gets removed by rustfmt
+ #[rustfmt::skip]
++#[cfg(not(rust_compiler = "mrustc"))]
+ pub macro pin($value:expr $(,)?) {
+     'p: {
+         super let mut pinned = $value;
+@@ -2047,3 +2048,11 @@
+ pub fn unreachable_pin_macro_type_constraint<'a, T>(_: T) -> Pin<&'a mut T> {
+     unreachable!()
+ }
++/// mrustc has no `super let`, so this keeps the value alive through temporary lifetime extension
++#[stable(feature = "pin_macro", since = "1.68.0")]
++#[rustc_macro_transparency = "semiopaque"]
++#[rustc_diagnostic_item = "pin_macro"]
++#[cfg(rust_compiler = "mrustc")]
++pub macro pin($value:expr $(,)?) {
++    $crate::pin::Pin::<&mut _> { pointer: &mut { $value } }
++}
+--- library/stdarch/crates/core_arch/src/x86/cpuid.rs
++++ library/stdarch/crates/core_arch/src/x86/cpuid.rs
+@@ -62,6 +62,11 @@
+     if cfg!(target_env = "sgx") {
+         panic!("`__cpuid` cannot be used in SGX");
+     }
++    #[cfg(rust_compiler = "mrustc")]
++    {
++        let _ = (leaf, sub_leaf);
++        return CpuidResult { eax: 0, ebx: 0, ecx: 0, edx: 0 };
++    }
+ 
+     let eax;
+     let ebx;
+--- src/tools/cargo/src/cargo/util/local_poll_adapter.rs
++++ src/tools/cargo/src/cargo/util/local_poll_adapter.rs
+@@ -36,12 +36,61 @@
+     /// to pick up the result.
+     ///
+     /// Futures that complete immediately are not queued.
++    #[cfg(not(rust_compiler = "mrustc"))]
+     pub fn poll<F>(&mut self, f: F, key: K) -> Poll<Result<V, E>>
+     where
+         F: AsyncFn(&S::Target, &K) -> Result<V, E> + 'a,
+     {
+         match self.cache.get(&key) {
+             // We have a cached success value, clone it and return.
++            Some(Poll::Ready(Ok(v))) => return Poll::Ready(Ok(v.clone())),
++            // We have a cached error value, remove it and return.
++            // Errors are not Clone, so they are only stored once.
++            Some(Poll::Ready(Err(_))) => return self.cache.remove(&key).unwrap(),
++            // This key is already pending.
++            Some(Poll::Pending) => return Poll::Pending,
++            // Looks like we have work to do!
++            None => {}
++        }
++
++        // Created a pinned future that executes the function,
++        // returning the key and the result.
++        let mut future = {
++            let key = key.clone();
++            let self_parameter = self.self_parameter.clone();
++            async move {
++                let v = f(self_parameter.deref(), &key).await;
++                (key, v)
++            }
++            .boxed_local()
++        };
++
++        // Attempt to run the future immediately. If it has no `await` yields,
++        // it will return here.
++        if let Some((k, v)) = (&mut future).now_or_never() {
++            if let Ok(success) = &v {
++                // Only cache successful results.
++                self.cache.insert(k, Poll::Ready(Ok(success.clone())));
++            }
++            return Poll::Ready(v);
++        }
++
++        // Insert Pending into the cache so we avoid queuing the same future twice.
++        self.cache.insert(key.clone(), Poll::Pending);
++
++        // Add the future to the pending queue.
++        self.pool.push(future);
++        Poll::Pending
++    }
++
++    #[cfg(rust_compiler = "mrustc")]
++    pub fn poll<F, Fut>(&mut self, f: F, key: K) -> Poll<Result<V, E>>
++    where
++        F: Fn(&S::Target, &K) -> Fut + 'a,
++        Fut: std::future::Future<Output = Result<V, E>>,
++    {
++        match self.cache.get(&key) {
++            // We have a cached success value, clone it and return.
+             Some(Poll::Ready(Ok(v))) => return Poll::Ready(Ok(v.clone())),
+             // We have a cached error value, remove it and return.
+             // Errors are not Clone, so they are only stored once.

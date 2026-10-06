@@ -930,6 +930,7 @@ namespace {
         case TargetVersion::Rustc1_74:  return "1.74";
         case TargetVersion::Rustc1_90:  return "1.90";
         case TargetVersion::Rustc1_96:  return "1.96";
+        case TargetVersion::Rustc1_98:  return "1.98";
         }
         return "?";
     }
@@ -959,6 +960,9 @@ ProgramParams::ProgramParams(int argc, char *argv[])
         }
         else if( strcmp(a, "1.96") == 0 ) {
             gTargetVersion = TargetVersion::Rustc1_96;
+        }
+        else if( strcmp(a, "1.98") == 0 ) {
+            gTargetVersion = TargetVersion::Rustc1_98;
         }
         else {
             ::std::cerr << "$MRUSTC_TARGET_VER set to an unknown value\n";
