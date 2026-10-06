@@ -1467,6 +1467,10 @@ ExprNodeP Parse_ExprVal_Inner(TokenStream& lex)
                                     expr_args.push_back( NEWNODE(AST::ExprNode_String, n->m_path.as_trivial().c_str(), {}) );
                                     break;
                                 }
+                                else if( const auto* n = dynamic_cast<const AST::ExprNode_Integer*>(expr) ) {
+                                    expr_args.push_back( NEWNODE(AST::ExprNode_Integer, n->m_value, n->m_datatype) );
+                                    break;
+                                }
                                 else if( const auto* n = dynamic_cast<const AST::ExprNode_Field*>(expr) ) {
                                     expr_args.push_back( NEWNODE(AST::ExprNode_String, n->m_name.c_str(), {}) );
                                     expr = &*n->m_obj;
