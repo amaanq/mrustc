@@ -337,7 +337,15 @@ namespace {
             auto new_path = ty_path.clone();
             return mutator.in_temporary( mv$(ty), ::MIR::RValue::make_Struct({ mv$(new_path), mv$(vals) }) );
         }
-        else if( ty.data().is_Borrow() || ty.data().is_Pointer() )
+        else if( const auto* te = ty.data().opt_Borrow() )
+        {
+            out_inner_ptr = lv.clone();
+            return mutator.in_temporary(
+                ::HIR::TypeRef::new_borrow(te->type, ::HIR::TypeRef::new_unit()),
+                ::MIR::RValue::make_DstPtr({ mv$(lv) })
+            );
+        }
+        else if( ty.data().is_Pointer() )
         {
             out_inner_ptr = lv.clone();
             return mutator.in_temporary(
@@ -516,6 +524,13 @@ void Trans_AutoImpls(::HIR::Crate& crate, TransList& trans_list)
                 auto gpath = new_fcn.m_args.front().second.data().as_Path().path.m_data.as_Generic().clone();
                 gpath.m_params.m_types.at(0) = ::HIR::TypeRef::new_unit();
                 auto ty = HIR::TypeRef::new_path(mv$(gpath), new_fcn.m_args.front().second.data().as_Path().binding.clone());
+                lv_ptr = get_unit_ptr(sp, builder, mv$(ty), MIR::LValue::new_Argument(0), lv_self);
+                } break;
+            case HIR::Function::Receiver::Custom: {
+                DEBUG("<dyn " << trait_path << ">::" << name << " - Custom receiver");
+                auto unit_ty = ::HIR::TypeRef::new_unit();
+                auto ty = MonomorphStatePtr(&unit_ty, &trait_path.m_params, &pp).monomorph_type(sp, fcn_def.m_args.front().second);
+                state.resolve.expand_associated_types(sp, ty);
                 lv_ptr = get_unit_ptr(sp, builder, mv$(ty), MIR::LValue::new_Argument(0), lv_self);
                 } break;
             default:
