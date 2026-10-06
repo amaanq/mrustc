@@ -2013,6 +2013,8 @@ bool TraitResolution::find_trait_impls(const Span& sp,
                 const auto& b_params = bound.m_path.m_params;
                 ::HIR::PathParams   params_mono_o;
                 const auto& b_params_mono = (monomorphise_pathparams_needed(b_params) ? params_mono_o = monomorph_cb.monomorph_path_params(sp, b_params, false) : b_params);
+                for(auto& ty : params_mono_o.m_types)
+                    this->expand_associated_types_inplace(sp, ty, {});
                 // TODO: Monormophise and EAT associated types
                 ::HIR::TraitPath::assoc_list_t  b_atys;
                 for(const auto& aty : bound.m_type_bounds)
@@ -3174,6 +3176,8 @@ bool TraitResolution::find_trait_impls_bound(const Span& sp, const ::HIR::Simple
                     if( monomorphise_pathparams_needed(bound.m_path.m_params) ) {
                         // TODO: Use a compare+callback method instead
                         auto b_params_mono = monomorph_cb.monomorph_path_params(sp, bound.m_path.m_params, false);
+                        for(auto& ty : b_params_mono.m_types)
+                            this->expand_associated_types_inplace(sp, ty, {});
                         ord &= this->compare_pp(sp, b_params_mono, params);
                     }
                     else {
