@@ -1996,7 +1996,12 @@ bool TraitResolution::find_trait_impls(const Span& sp,
         } // TU_ARMA(Generic)
     // If this type is an opaque UfcsKnown - check bounds
     TU_ARMA(Path, e) {
-        if( e.binding.is_Opaque() )
+        // rustc prefers where-clause candidates over the associated type's own bounds, which picks `Residual<Box<O>>` over `Try`'s `Residual<Self::Output>`
+        bool where_clause_applies = false;
+        if( e.binding.is_Opaque() ) {
+            find_trait_impls_bound(sp, trait, params, type, [&](ImplRef, ::HIR::Compare) { where_clause_applies = true; return false; });
+        }
+        if( e.binding.is_Opaque() && !where_clause_applies )
         {
             ASSERT_BUG(sp, e.path.m_data.is_UfcsKnown(), "Opaque bound type wasn't UfcsKnown - " << type);
             const auto& pe = e.path.m_data.as_UfcsKnown();
