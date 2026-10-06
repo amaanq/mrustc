@@ -17,6 +17,9 @@
 #include "ast/ast.hpp"
 #include "ast/crate.hpp"
 #include <cstring>
+#ifndef _WIN32
+# include <unistd.h>
+#endif
 #include <main_bindings.hpp>
 #include "resolve/main_bindings.hpp"
 #include "hir/main_bindings.hpp"
@@ -837,6 +840,28 @@ int main(int argc, char *argv[])
             break;
         }
 
+        std::string deferred_command_file;
+#ifndef _WIN32
+        // Dependents only read the .hir, so the caller can start them while this process finishes codegen
+        if( crate_type == ::AST::Crate::Type::RustLib && trans_opt.build_command_file != "" )
+        {
+            deferred_command_file = trans_opt.build_command_file;
+            remove(deferred_command_file.c_str());
+            ::std::cout.flush();
+            ::std::cerr.flush();
+            pid_t pid = fork();
+            if( pid < 0 ) {
+                perror("fork");
+                exit(1);
+            }
+            if( pid > 0 ) {
+                ::std::ofstream(deferred_command_file + ".pid") << pid << ::std::endl;
+                ::std::ofstream(params.outfile);
+                _exit(0);
+            }
+            trans_opt.build_command_file = deferred_command_file + ".tmp";
+        }
+#endif
 
         // - Do post-monomorph inlining
         CompilePhaseV("MIR Optimise Inline PostSave", [&]() { MIR_OptimiseCrate_Inlining(*hir_crate, items, true); });
@@ -850,6 +875,9 @@ int main(int argc, char *argv[])
         case ::AST::Crate::Type::RustLib:
             // Generate a linkable .o
             CompilePhaseV("Trans Codegen", [&]() { Trans_Codegen(params.outfile, CodegenOutput::StaticLibrary, trans_opt, std::move(hir_crate), std::move(items), hir_file); });
+            if( deferred_command_file != "" ) {
+                rename(trans_opt.build_command_file.c_str(), deferred_command_file.c_str());
+            }
             break;
         case ::AST::Crate::Type::RustDylib:
         case ::AST::Crate::Type::CDylib:

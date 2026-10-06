@@ -1122,29 +1122,29 @@ RunnableJob Job_BuildTarget::start()
 //
 RunnableJob Job_Codegen::start()
 {
+    StringList  args;
+    StringListKV    env;
+    #ifdef _WIN32
     std::string line;
     ::std::getline(::std::ifstream(this->m_command_file), line);
     while(!line.empty() && std::isblank(line.back())) {
         line.pop_back();
     }
-    StringList  args;
-    StringListKV    env;
-    #ifdef _WIN32
     const auto* exe = "cmd.exe";
     args.push_back("/c");
     args.push_back(std::move(line));
     #else
-    // At equal priority, gcc's LTO partitions tripled the frontend jobs' LoadCrates time building rustc
+    // mrustc's forked child writes the command file once the C is ready, and at equal priority gcc's LTO partitions tripled the frontend jobs' LoadCrates time building rustc
     const auto* exe = getenv("SHELL");
-    std::string quoted;
-    for(char c : line) {
-        if( c == '\'' )
-            quoted += "'\\''";
-        else
-            quoted += c;
-    }
+    env.push_back("CODEGEN_SCRIPT", this->m_command_file.str());
     args.push_back("-c");
-    args.push_back("exec nice -n 10 \"$SHELL\" -c '" + quoted + "'");
+    args.push_back(
+        "f=\"$CODEGEN_SCRIPT\"; p=\"$f.pid\"; "
+        "while [ ! -e \"$f\" ]; do "
+        "if [ -e \"$p\" ] && ! kill -0 \"$(cat \"$p\")\" 2>/dev/null && [ ! -e \"$f\" ]; then echo \"codegen for $f exited early\" >&2; exit 1; fi; "
+        "sleep 0.05; done; "
+        "rm -f \"$p\"; exec nice -n 10 \"$SHELL\" \"$f\""
+        );
     #endif
     return RunnableJob(exe, std::move(args), std::move(env), helpers::path());
 }
