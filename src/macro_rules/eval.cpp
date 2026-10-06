@@ -965,7 +965,7 @@ namespace
             {
                 lex.consume();
             }
-            else if( !type_mode && (lex.next() == TOK_LT || lex.next() == TOK_DOUBLE_LT) )
+            else if( lex.next() == TOK_LT || lex.next() == TOK_DOUBLE_LT )
             {
                 if( !consume_tt_angle(lex) )
                     return false;
