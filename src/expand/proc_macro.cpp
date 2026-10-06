@@ -237,6 +237,7 @@ public:
     virtual void send_ident(const Ident& val) = 0;
     virtual void send_lifetime(const char* val) = 0;
     virtual void send_string(const ::std::string& s) = 0;
+    virtual void send_string(const ::std::string& s, const Ident::Hygiene& h) { send_string(s); }
     virtual void send_bytestring(const ::std::string& s) = 0;
     virtual void send_cstring(const ::std::string& s) = 0;
     virtual void send_char(uint32_t ch) = 0;
@@ -307,6 +308,7 @@ public:
         this->send_bytes(val, ::std::strlen(val));
     }
     void send_ident(const char* val) override {
+        send_span_ref(1);
         this->send_u8(static_cast<uint8_t>(TokenClass::Ident));
         if( Lex_FindReservedWord(val, m_edition) != TOK_NULL ) {
             auto size = ::std::strlen(val);
@@ -319,13 +321,34 @@ public:
         }
     }
     void send_ident(const Ident& val) override {
-        send_ident(val.name.c_str());
+        send_hygiene_span(val.hygiene);
+        send_ident_raw(val.name.c_str());
+    }
+    void send_ident_raw(const char* val) {
+        this->send_u8(static_cast<uint8_t>(TokenClass::Ident));
+        if( Lex_FindReservedWord(val, m_edition) != TOK_NULL ) {
+            auto size = ::std::strlen(val);
+            this->send_v128u( 2 + size );
+            this->send_bytes_raw("r#", 2);
+            this->send_bytes_raw(val, size);
+        }
+        else {
+            this->send_bytes(val, ::std::strlen(val));
+        }
     }
     void send_lifetime(const char* val) override {
         this->send_u8(static_cast<uint8_t>(TokenClass::Lifetime));
         this->send_bytes(val, ::std::strlen(val));
     }
     void send_string(const ::std::string& s) override {
+        send_span_ref(1);
+        send_string_raw(s);
+    }
+    void send_string(const ::std::string& s, const Ident::Hygiene& h) override {
+        send_hygiene_span(h);
+        send_string_raw(s);
+    }
+    void send_string_raw(const ::std::string& s) {
         this->send_u8(static_cast<uint8_t>(TokenClass::String));
         this->send_bytes(s.data(), s.size());
     }
@@ -419,7 +442,46 @@ public:
     virtual Token realGetToken() override;
     virtual AST::Edition realGetEdition() const override { return m_edition; }
     virtual Ident::Hygiene realGetHygiene() const override;
+    /// Only a function-like macro's input tokens carry exact hygiene, re-tokenised derive and attribute items return with none as before
+    bool    m_carry_hygiene = false;
 private:
+    /// Span indexes from 2 name input hygienes, so tokens the macro passes through keep theirs (1 is the call site, 0 mixed site)
+    ::std::vector<Ident::Hygiene>   m_span_hygiene;
+    ::std::vector<size_t>   m_span_uses;
+    size_t  m_sent_span = 1;
+    size_t  m_recv_span = 1;
+    void send_hygiene_span(const Ident::Hygiene& h) {
+        if( !m_carry_hygiene )
+            return;
+        // Re-tokenised AST strings and idents can carry no hygiene, and must agree with idents the macro makes at the call site
+        size_t idx = 1;
+        if( h != Ident::Hygiene() ) {
+            auto it = ::std::find(m_span_hygiene.begin(), m_span_hygiene.end(), h);
+            idx = 2 + (it - m_span_hygiene.begin());
+            if( it == m_span_hygiene.end() ) {
+                m_span_hygiene.push_back(h);
+                m_span_uses.push_back(0);
+                this->send_span_def(idx, m_parent_span);
+            }
+            m_span_uses[idx - 2] ++;
+        }
+        send_span_ref(idx);
+    }
+    void send_span_ref(size_t idx) {
+        if( m_carry_hygiene && idx != m_sent_span ) {
+            this->send_u8(static_cast<uint8_t>(TokenClass::SpanRef));
+            this->send_v128u(idx);
+            m_sent_span = idx;
+        }
+    }
+    Ident::Hygiene recv_hygiene() const {
+        if( m_recv_span >= 2 && m_recv_span - 2 < m_span_hygiene.size() )
+            return m_span_hygiene[m_recv_span - 2];
+        // `Span::call_site()` resolves at the invocation, taken as the commonest input hygiene since an attribute's own tokens differ from its item's
+        if( m_recv_span == 1 && !m_span_hygiene.empty() )
+            return m_span_hygiene[::std::max_element(m_span_uses.begin(), m_span_uses.end()) - m_span_uses.begin()];
+        return Ident::Hygiene();
+    }
     Token realGetToken_();
     void send_u8(uint8_t v);
     void send_bytes(const void* val, size_t size);
@@ -528,7 +590,7 @@ namespace {
             case TOK_INTERPOLATED_VIS:
                 TODO(sp, "TOK_INTERPOLATED_...");
             // Value tokens
-            case TOK_IDENT:     m_pmi.send_ident(tok.ident().name.c_str());   break;  // TODO: Raw idents
+            case TOK_IDENT:     m_pmi.send_ident(tok.ident());   break;  // TODO: Raw idents
             case TOK_LIFETIME:  m_pmi.send_lifetime(tok.ident().name.c_str());  break;  // TODO: Hygine?
             case TOK_INTEGER:
                 if( tok.datatype() == CORETYPE_CHAR ) {
@@ -540,7 +602,7 @@ namespace {
                 break;
             case TOK_CHAR:      m_pmi.send_char(tok.intval().truncate_u64());  break;
             case TOK_FLOAT:     m_pmi.send_float(tok.datatype(), tok.floatval());   break;
-            case TOK_STRING:        m_pmi.send_string(tok.str());       break;
+            case TOK_STRING:        m_pmi.send_string(tok.str(), tok.str_hygiene());       break;
             case TOK_BYTESTRING:    m_pmi.send_bytestring(tok.str());   break;
             case TOK_CSTRING:       m_pmi.send_cstring(tok.str());      break;
 
@@ -1692,12 +1754,13 @@ namespace {
         }
     };
 }
-::std::unique_ptr<TokenStream> ProcMacro_Invoke(const Span& sp, const ::AST::Crate& crate, const ::std::vector<RcString>& mac_path, const TokenTree* attr_input, std::function<void(Visitor& v)> cb)
+::std::unique_ptr<TokenStream> ProcMacro_Invoke(const Span& sp, const ::AST::Crate& crate, const ::std::vector<RcString>& mac_path, const TokenTree* attr_input, std::function<void(Visitor& v)> cb, bool carry_hygiene=false)
 {
     // 1. Create ProcMacroInv instance
     auto pmi = ProcMacro_Invoke_int(sp, crate, mac_path);
     if( !pmi.check_good() )
         return ::std::unique_ptr<TokenStream>();
+    pmi.m_carry_hygiene = carry_hygiene;
     if( attr_input ) {
         // TODO: Assert that this is a `#[proc_macro_attribute]` macro
         if( attr_input->size() != 0 )
@@ -1836,7 +1899,7 @@ TokenTree ProcMacro_ItemTokens(const Span& sp, AST::Edition edition, slice<const
 {
     return ProcMacro_Invoke(sp, crate, mac_path, nullptr, [&](Visitor& v){
         v.visit_tokentree(tt);
-        });
+        }, /*carry_hygiene=*/true);
 }
 
 ProcMacroInv::ProcMacroInv(const Span& sp, AST::Edition edition, const char* executable, const ::HIR::ProcMacro& proc_macro_desc):
@@ -2184,7 +2247,8 @@ Token ProcMacroInv::realGetToken_() {
     case TokenClass::EndOfStream:
         TODO(this->m_parent_span, "EndOfStream");
     case TokenClass::SpanRef:
-        TODO(this->m_parent_span, "SpanDef");
+        m_recv_span = this->recv_v128u();
+        return this->realGetToken_();
     case TokenClass::SpanDef:
         TODO(this->m_parent_span, "SpanDef");
         break;
@@ -2207,9 +2271,9 @@ Token ProcMacroInv::realGetToken_() {
         if( t != TOK_NULL )
             return t;
         if(val[0] == 'r' && val[1] == '#' ) {
-            return Token(TOK_IDENT, RcString::new_interned(val.c_str() + 2));
+            return Token(TOK_IDENT, Ident(recv_hygiene(), RcString::new_interned(val.c_str() + 2)));
         }
-        return Token(TOK_IDENT, RcString::new_interned(val));
+        return Token(TOK_IDENT, Ident(recv_hygiene(), RcString::new_interned(val)));
         }
     case TokenClass::Lifetime: {
         auto val = this->recv_bytes();
@@ -2217,7 +2281,7 @@ Token ProcMacroInv::realGetToken_() {
         }
     case TokenClass::String: {
         auto val = this->recv_bytes();
-        return Token(TOK_STRING, mv$(val), this->get_hygiene());
+        return Token(TOK_STRING, mv$(val), recv_hygiene());
         }
     case TokenClass::ByteString: {
         auto val = this->recv_bytes();

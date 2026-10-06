@@ -29,6 +29,9 @@ impl Span
     pub(crate) fn from_raw(idx: usize) -> Self {
         Span(idx)
     }
+    pub(crate) fn raw(&self) -> usize {
+        self.0
+    }
 }
 
 impl Span
