@@ -4176,10 +4176,16 @@ namespace {
                         m_of << "make_sliceptr";
                         m_of << "("; emit_param(ve.ptr_val); m_of << ", "; emit_param(ve.meta_val); m_of << ")";
                         break;
-                    case MetadataType::TraitObject:
+                    case MetadataType::TraitObject: {
+                        ::HIR::TypeRef  tmp_meta;
+                        bool meta_is_struct = ve.meta_val.is_LValue() && mir_res.get_lvalue_type(tmp_meta, ve.meta_val.as_LValue()).data().is_Path();
                         m_of << "make_traitobjptr";
-                        m_of << "("; emit_param(ve.ptr_val); m_of << ", "; emit_param(ve.meta_val); m_of << ")";
-                        break;
+                        m_of << "("; emit_param(ve.ptr_val); m_of << ", "; emit_param(ve.meta_val);
+                        if( meta_is_struct ) {
+                            m_of << "._0._0";
+                        }
+                        m_of << ")";
+                        } break;
                     case MetadataType::Zero:
                     case MetadataType::Unknown:
                     case MetadataType::None:
