@@ -49,6 +49,12 @@ void make_dep_codegen(::std::string& d) {
     }
     d += " (codegen)";
 }
+void use_plugin_codegen(std::vector<std::string>& deps, const std::string& k, const PackageRef& dep) {
+    const auto& p = dep.get_package();
+    if( deferred_codegen_enabled() && !deps.empty() && deps.back() == k && p.has_library() && p.get_library().m_is_proc_macro ) {
+        make_dep_codegen(deps.back());
+    }
+}
 
 struct RunState
 {
@@ -186,8 +192,8 @@ class Job_Codegen: public Job
     std::string m_name;
     helpers::path   m_rlib_outfile;
     helpers::path   m_command_file;
-    std::vector<std::string>    m_dependencies;
 public:
+    std::vector<std::string>    m_dependencies;
     Job_Codegen(const RunState& parent, const std::string& parent_name, helpers::path parent_outfile, helpers::path path)
         : m_name(parent_name+" (codegen)")
         , m_rlib_outfile(parent_outfile)
@@ -542,6 +548,7 @@ bool BuildList::build(BuildOptions opts, unsigned num_jobs, bool dry_run)
                 auto k = run_state.get_key(dep.get_package(), false, e.is_host);
                 DEBUG("Dep " << k);
                 is_dirty |= convert_state.handle_dep(job->m_dependencies, output_ts, k);
+                use_plugin_codegen(job->m_dependencies, k, dep);
             }
         });
         job->m_is_dirty = is_dirty;
@@ -554,10 +561,12 @@ bool BuildList::build(BuildOptions opts, unsigned num_jobs, bool dry_run)
             // TODO: Codegen should re-run if the output file from it is missing
             auto job_codegen = ::std::make_unique<Job_Codegen>(run_state, job_p->name(), job_p->get_outfile(), job_p->get_codegen());
             job_codegen->m_is_dirty = is_dirty || run_state.outfile_needs_rebuild(job_codegen->get_outfile());
+            auto job_codegen_p = job_codegen.get();
             convert_state.add_job(std::move(job_codegen), output_ts, is_dirty);
             // HACK: Ensure that the dependencies for this job all are for codegen
-            for(auto& d : job_p->m_dependencies) {
+            for(auto d : job_p->m_dependencies) {
                 make_dep_codegen(d);
+                job_codegen_p->m_dependencies.push_back(std::move(d));
             }
         }
     }
@@ -584,6 +593,7 @@ bool BuildList::build(BuildOptions opts, unsigned num_jobs, bool dry_run)
                 {
                     auto k = run_state.get_key(dep.get_package(), false, is_host);
                     is_dirty |= convert_state.handle_dep(job->m_dependencies, output_ts, k);
+                    use_plugin_codegen(job->m_dependencies, k, dep);
                 }
             });
         }
@@ -595,10 +605,12 @@ bool BuildList::build(BuildOptions opts, unsigned num_jobs, bool dry_run)
             // TODO: Codegen should re-run if the output file from it is missing
             auto job_codegen = ::std::make_unique<Job_Codegen>(run_state, job->name(), job->get_outfile(), job->get_codegen());
             job_codegen->m_is_dirty = is_dirty || run_state.outfile_needs_rebuild(job_codegen->get_outfile());
+            auto job_codegen_p = job_codegen.get();
             convert_state.add_job(std::move(job_codegen), output_ts, is_dirty);
             // HACK: Ensure that the dependencies for this job all are for codegen
-            for(auto& d : job->m_dependencies) {
+            for(auto d : job->m_dependencies) {
                 make_dep_codegen(d);
+                job_codegen_p->m_dependencies.push_back(std::move(d));
             }
         }
         convert_state.add_job(std::move(job), output_ts, is_dirty);
