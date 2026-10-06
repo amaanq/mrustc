@@ -226,6 +226,22 @@ namespace {
 
             visit_type( node_ptr->m_res_type );
         }
+        void visit(::HIR::ExprNode_Generator& node) override
+        {
+            ::HIR::ExprVisitorDef::visit(node);
+            if( !node.m_code ) {
+                visit_generic_path( ::HIR::Visitor::PathContext::TYPE, node.m_obj_path );
+                visit_type( node.m_state_data_type );
+            }
+        }
+        void visit(::HIR::ExprNode_AsyncBlock& node) override
+        {
+            ::HIR::ExprVisitorDef::visit(node);
+            if( !node.m_code ) {
+                visit_generic_path( ::HIR::Visitor::PathContext::TYPE, node.m_obj_path );
+                visit_type( node.m_state_data_type );
+            }
+        }
         void visit(::HIR::ExprNode_Closure& node) override
         {
             assert( ! node.m_code );
@@ -499,15 +515,15 @@ namespace {
                             return ::HIR::TypeRef::new_path( mv$(path), ::HIR::TypePathBinding::make_Struct(&str) );
                             }
                         TU_ARMA(Generator, node_p) {
-                            DEBUG("Generator: " << node_p->m_obj_path);
-                            auto path = monomorphiser.monomorph_genericpath(sp, node_p->m_obj_path, false);
+                            DEBUG("Generator: " << node_p->m_obj_path_base);
+                            auto path = monomorphiser.monomorph_genericpath(sp, node_p->m_obj_path_base, false);
                             const auto& str = *node_p->m_obj_ptr;
                             DEBUG(ty << " -> " << path);
                             return ::HIR::TypeRef::new_path( mv$(path), ::HIR::TypePathBinding::make_Struct(&str) );
                             }
                         TU_ARMA(Async, node_p) {
-                            DEBUG("Async: " << node_p->m_obj_path);
-                            auto path = monomorphiser.monomorph_genericpath(sp, node_p->m_obj_path, false);
+                            DEBUG("Async: " << node_p->m_obj_path_base);
+                            auto path = monomorphiser.monomorph_genericpath(sp, node_p->m_obj_path_base, false);
                             const auto& str = *node_p->m_obj_ptr;
                             DEBUG(ty << " -> " << path);
                             return ::HIR::TypeRef::new_path( mv$(path), ::HIR::TypePathBinding::make_Struct(&str) );
@@ -1495,6 +1511,22 @@ namespace {
                 node.m_binding = m_monomorph.get_value(node.span(), HIR::GenericRef("", node.m_binding)).as_Generic().binding;
             }
 
+            void visit(::HIR::ExprNode_Generator& node) override
+            {
+                ::HIR::ExprVisitorDef::visit(node);
+                if( !node.m_code ) {
+                    visit_generic_path( ::HIR::Visitor::PathContext::TYPE, node.m_obj_path );
+                    visit_type( node.m_state_data_type );
+                }
+            }
+            void visit(::HIR::ExprNode_AsyncBlock& node) override
+            {
+                ::HIR::ExprVisitorDef::visit(node);
+                if( !node.m_code ) {
+                    visit_generic_path( ::HIR::Visitor::PathContext::TYPE, node.m_obj_path );
+                    visit_type( node.m_state_data_type );
+                }
+            }
             // Custom visitor that only updates the captures and path
             // - Don't want to visit the patterns within
             void visit(::HIR::ExprNode_Closure& node) override
@@ -1689,6 +1721,7 @@ namespace {
             // Mark the object pathname in the closure.
             node.m_obj_ptr = &gen_struct_ref;
             node.m_obj_path = ::HIR::GenericPath( gen_struct_path, monomorph_cb.freeze() );
+            node.m_obj_path_base = node.m_obj_path.clone();
             node.m_captures = std::move(cr_vars.capture_nodes);
             node.m_state_data_type = ::HIR::TypeRef::new_path( ::HIR::GenericPath(state_struct_path, node.m_obj_path.m_params.clone()), &state_struct_ptr->as_Struct() );
 
@@ -1852,6 +1885,7 @@ namespace {
             // Mark the object pathname
             node.m_obj_ptr = &gen_struct_ref;
             node.m_obj_path = ::HIR::GenericPath( gen_struct_path, monomorph_cb.freeze() );
+            node.m_obj_path_base = node.m_obj_path.clone();
             node.m_captures = std::move(cr_vars.capture_nodes);
             node.m_state_data_type = ::HIR::TypeRef::new_path( ::HIR::GenericPath(state_struct_path, node.m_obj_path.m_params.clone()), &state_struct_ptr->as_Struct() );
 

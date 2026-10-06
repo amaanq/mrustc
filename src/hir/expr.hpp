@@ -920,6 +920,7 @@ struct ExprNode_Generator:
 
     // Generated type information
     const ::HIR::Struct*    m_obj_ptr = nullptr;
+    ::HIR::GenericPath  m_obj_path_base;
     ::HIR::GenericPath  m_obj_path;
     // Lifetime for captured borrows, filled by lifetime infer pass
     ::HIR::LifetimeRef  m_capture_lifetime;
@@ -984,6 +985,7 @@ struct ExprNode_AsyncBlock
 
     // Generated type information
     const ::HIR::Struct*    m_obj_ptr = nullptr;
+    ::HIR::GenericPath  m_obj_path_base;
     ::HIR::GenericPath  m_obj_path;
     // Lifetime for captured borrows, filled by lifetime infer pass
     ::HIR::LifetimeRef  m_capture_lifetime;
