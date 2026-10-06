@@ -865,6 +865,11 @@ namespace {
 
         ~CodeGenerator_C() {}
 
+        static bool is_large_unit(const ::std::string& path)
+        {
+            ::std::ifstream is(path, ::std::ios::binary | ::std::ios::ate);
+            return static_cast<size_t>(is.tellg()) >= (size_t(256) << 20);
+        }
         void finalise(const TransOptions& opt, CodegenOutput out_ty, const ::std::string& hir_file) override
         {
             const bool create_shims = (out_ty == CodegenOutput::Executable);
@@ -1297,6 +1302,7 @@ namespace {
             bool is_windows = false;
 #endif
             size_t  arg_file_start = 0;
+            bool use_lto = false;
             switch( m_compiler )
             {
             case Compiler::Gcc:
@@ -1422,7 +1428,17 @@ namespace {
                     break;
                 case CodegenOutput::StaticLibrary:
                 case CodegenOutput::Object:
-                    args.push_back("-c");
+                    use_lto = is_large_unit(m_outfile_path_c);
+                    if( use_lto ) {
+                        args.push_back("-flto=auto");
+                        args.push_back("-flto-partition=balanced");
+                        args.push_back("-r");
+                        args.push_back("-nostdlib");
+                        args.push_back("-flinker-output=nolto-rel");
+                    }
+                    else {
+                        args.push_back("-c");
+                    }
                     break;
                 }
                 break;
@@ -1552,6 +1568,13 @@ namespace {
             if(use_arg_file) {
                 cmd_ss << "@\"" << FmtShell(command_file, is_windows) << "\"";
                 command_file_stream.close();
+            }
+            if( use_lto ) {
+                // LTO promotes statics and clones to globals named `*.lto_priv.N`, `*.constprop.N`, `*.isra.N`, which would clash between crates
+                const auto& obj = out_ty == CodegenOutput::StaticLibrary ? m_outfile_path + ".o" : m_outfile_path;
+                cmd_ss << " && objcopy --wildcard --localize-symbol='*.*' \"" << FmtShell(obj, is_windows) << "\"";
+            }
+            if(use_arg_file) {
                 ASSERT_BUG(Span(), !command_file_stream.bad(), "Error set on output stream for: " << m_outfile_path_c);
             }
             //DEBUG("- " << cmd_ss.str());
