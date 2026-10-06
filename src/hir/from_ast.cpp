@@ -15,6 +15,7 @@
 #include "visitor.hpp"
 #include <macro_rules/macro_rules.hpp>
 #include <hir/item_path.hpp>
+#include <parse/ttstream.hpp>
 #include <limits.h>
 #include <hir_typeck/helpers.hpp>   // monomorph
 #include <trans/target.hpp>
@@ -1851,6 +1852,21 @@ namespace {
     {
         markings.track_caller = true;
     }
+    if( const auto* a = attrs.get("unstable") )
+    {
+        TTStream    lex(a->span(), ParseState(), a->data());
+        lex.getTokenCheck(TOK_PAREN_OPEN);
+        while( lex.lookahead(0) == TOK_IDENT )
+        {
+            auto key = lex.getTokenCheck(TOK_IDENT).ident().name;
+            lex.getTokenCheck(TOK_EQUAL);
+            auto val = lex.getToken();
+            if( key == "feature" && val.type() == TOK_STRING )
+                markings.unstable_feature = RcString::new_interned(val.str());
+            if( !lex.getTokenIf(TOK_COMMA) )
+                break;
+        }
+    }
     markings.is_naked = f.m_markings.is_naked;
 
     ::HIR::Linkage  linkage;
@@ -2488,6 +2504,11 @@ public:
         rv.m_crate_name = "bin#";
     }
     rv.m_edition = crate.m_edition;
+    for(const auto& a : crate.m_attrs.m_items)
+    {
+        if( a.name() == "feature" )
+            a.parse_paren_ident_list([&](const Span& , RcString f){ rv.m_enabled_features.insert(f); });
+    }
 
     g_crate_ptr = &rv;
     g_ast_crate_ptr = &crate;

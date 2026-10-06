@@ -210,6 +210,7 @@ public:
         std::vector<unsigned> rustc_legacy_const_generics;
         bool track_caller = false;
         bool is_naked = false;
+        RcString unstable_feature;
         enum Inline {
             Auto,   // no annotation
             Never,  // #[inline(never)]
@@ -673,6 +674,7 @@ class Crate
 public:
     RcString   m_crate_name;
     AST::Edition    m_edition;
+    ::std::set<RcString>    m_enabled_features;
 
     Module  m_root_module;
 

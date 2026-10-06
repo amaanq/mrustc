@@ -1232,6 +1232,7 @@
             auto _ = m_out.open_object("HIR::Function::Markings");
             serialise_vec(m.rustc_legacy_const_generics);
             m_out.write_bool(m.track_caller);
+            m_out.write_string(m.unstable_feature);
         }
         void serialise(const ::HIR::Constant& item)
         {

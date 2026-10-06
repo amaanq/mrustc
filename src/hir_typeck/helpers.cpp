@@ -5028,6 +5028,11 @@ bool TraitResolution::find_method(const Span& sp,
             // Ignore method: Not visibile
             return ;
         }
+        // rustc skips another crate's unstable inherent method unless the feature is enabled, so 1.98's `u128::widen` leaves compiler_builtins' `HInt::widen` callable
+        const auto& feature = impl.m_methods.at(method_name).data.m_markings.unstable_feature;
+        if( feature != "" && impl.m_src_module.crate_name() != m_crate.m_crate_name && m_crate.m_enabled_features.count(feature) == 0 ) {
+            return ;
+        }
         ::HIR::PathParams   impl_params;
         auto cmp = ftic_check_params(sp, ::HIR::SimplePath(), nullptr, self_ty, impl.m_params, {}, impl.m_type, impl_params);
         // Only a concrete impl (`impl GetSpan<Span>`) can be wrong for the type `_` resolves to
