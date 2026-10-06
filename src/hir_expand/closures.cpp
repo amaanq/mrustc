@@ -1908,14 +1908,14 @@ namespace {
             fcn_resume.m_args.push_back(std::make_pair( HIR::Pattern(), cr_vars.new_locals[1].clone() ));
             // - `-> Poll<{Return}>`
             ::HIR::PathParams   ret_params;
-            ret_params.m_types.push_back( monomorph_cb.monomorph_type(sp, return_ty) );
+            ret_params.m_types.push_back( return_ty.clone() );
             auto lang_Poll = m_resolve.m_crate.get_lang_item_path(sp, "Poll");
             fcn_resume.m_return = ::HIR::TypeRef::new_path( ::HIR::GenericPath(lang_Poll, std::move(ret_params)), &m_resolve.m_crate.get_enum_by_path(sp, lang_Poll) );
             // - ` { ... }`
             // Emit as a top-level generator
             // - It has a populated body, non-zero `m_obj_ptr`, and unset `m_obj_path`
             auto v = ::std::make_unique<::HIR::ExprNode_GeneratorWrapper>(sp, HIR::TypeRef(), std::move(body_node), false, false, /*future*/true);
-            v->m_return   = monomorph_cb.monomorph_type(sp, return_ty);
+            v->m_return   = return_ty.clone();
             v->m_capture_usages = std::move(cr_vars.capture_usages);
             v->m_res_type = fcn_resume.m_return.clone();
             v->m_obj_ptr = node.m_obj_ptr;
@@ -1931,7 +1931,7 @@ namespace {
             ::HIR::TraitImpl    impl;
             impl.m_params = std::move(params);
             impl.m_type = ::HIR::TypeRef::new_path( ::HIR::GenericPath(gen_struct_path, impl.m_params.make_nop_params(0)), &gen_struct_ref );
-            impl.m_types.insert(std::make_pair( RcString::new_interned("Output"), ::HIR::TraitImpl::ImplEnt<HIR::TypeRef> { false, monomorph_cb.monomorph_type(sp, return_ty) } ));
+            impl.m_types.insert(std::make_pair( RcString::new_interned("Output"), ::HIR::TraitImpl::ImplEnt<HIR::TypeRef> { false, return_ty.clone() } ));
             impl.m_methods.insert(std::make_pair( RcString::new_interned("poll"), ::HIR::TraitImpl::ImplEnt<HIR::Function> { false, std::move(fcn_resume) } ));
             m_out.trait_impls.push_back(std::make_pair("future_trait", std::move(impl)));
         }
