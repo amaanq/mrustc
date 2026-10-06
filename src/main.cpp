@@ -840,6 +840,10 @@ int main(int argc, char *argv[])
             break;
         }
 
+        if( crate_type == ::AST::Crate::Type::RustLib )
+        {
+            remove((params.outfile + ".shared").c_str());
+        }
         std::string deferred_command_file;
 #ifndef _WIN32
         // Dependents only read the .hir, so the caller can start them while this process finishes codegen
@@ -855,7 +859,7 @@ int main(int argc, char *argv[])
                 exit(1);
             }
             if( pid > 0 ) {
-                ::std::ofstream(deferred_command_file + ".pid") << pid << ::std::endl;
+                ::std::ofstream(params.outfile + ".codegen-pid") << pid << ::std::endl;
                 ::std::ofstream(params.outfile);
                 _exit(0);
             }
@@ -877,6 +881,7 @@ int main(int argc, char *argv[])
             CompilePhaseV("Trans Codegen", [&]() { Trans_Codegen(params.outfile, CodegenOutput::StaticLibrary, trans_opt, std::move(hir_crate), std::move(items), hir_file); });
             if( deferred_command_file != "" ) {
                 rename(trans_opt.build_command_file.c_str(), deferred_command_file.c_str());
+                remove((params.outfile + ".codegen-pid").c_str());
             }
             break;
         case ::AST::Crate::Type::RustDylib:

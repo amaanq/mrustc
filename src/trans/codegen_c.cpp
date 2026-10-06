@@ -2971,6 +2971,21 @@ namespace {
 
             m_mir_res = nullptr;
         }
+        void emit_shared_alias(const ::HIR::Path& p, const ::HIR::Function& item, const Trans_Params& params) override
+        {
+            // A static body stays inlinable within this unit, and the weak alias merges with sibling crates' copies
+            m_of << "extern __typeof__(" << Trans_Mangle(p) << ") " << Trans_Mangle(p) << "__s __attribute__((weak,visibility(\"hidden\"),alias(\"" << Trans_Mangle(p) << "\")));\n";
+        }
+        void emit_shared_proto(const ::HIR::Path& p, const ::HIR::Function& item, const Trans_Params& params) override
+        {
+            ::MIR::Function empty_fcn;
+            ::MIR::TypeResolve  top_mir_res { sp, m_resolve, FMT_CB(ss, ss << "/*shared*/ fn " << p;), ::HIR::TypeRef(), {}, empty_fcn };
+            m_mir_res = &top_mir_res;
+            m_of << "// SHARED " << p << "\n";
+            emit_function_header(p, item, params);
+            m_of << " asm(\"" << Trans_Mangle(p) << "__s\");\n";
+            m_mir_res = nullptr;
+        }
         void emit_function_proto(const ::HIR::Path& p, const ::HIR::Function& item, const Trans_Params& params, bool is_extern_def) override
         {
             ::MIR::Function empty_fcn;

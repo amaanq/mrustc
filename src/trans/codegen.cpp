@@ -11,10 +11,49 @@
 #include <mir/mir.hpp>
 #include <mir/operations.hpp>
 #include <algorithm>
+#include <set>
+#include <unordered_set>
+#include <fstream>
+#include <cstdio>
+#ifndef _WIN32
+# include <signal.h>
+# include <unistd.h>
+#endif
+#include "mangling.hpp"
 #include "target.hpp"
 
 #include "codegen.hpp"
 #include "monomorphise.hpp"
+
+/// Reads the instances a dependency's codegen emitted, waiting while its forked codegen is still running
+static void read_shared_instances(const ::std::string& rlib, ::std::unordered_set<::std::string>& out)
+{
+    const auto shared_path = rlib + ".shared";
+    for(;;)
+    {
+        ::std::ifstream is(shared_path);
+        if( is.is_open() )
+        {
+            ::std::string line;
+            while( ::std::getline(is, line) )
+                out.insert(line);
+            return;
+        }
+#ifndef _WIN32
+        int pid = 0;
+        ::std::ifstream pid_is(rlib + ".codegen-pid");
+        if( !(pid_is >> pid) || pid <= 0 || kill(pid, 0) != 0 )
+        {
+            if( ::std::ifstream(shared_path).is_open() )
+                continue;
+            return;
+        }
+        usleep(20000);
+#else
+        return;
+#endif
+    }
+}
 
 void Trans_Codegen(const ::std::string& outfile, CodegenOutput out_ty, const TransOptions& opt, ::HIR::CratePtr crate_ptr, TransList list, const ::std::string& hir_file)
 {
@@ -102,6 +141,22 @@ void Trans_Codegen(const ::std::string& outfile, CodegenOutput out_ty, const Tra
     }
     list.m_constructors.clear();
 
+    // Instances already emitted by a dependency's codegen, which are linked to rather than emitted again
+    const bool share_instances = opt.mode == "c" && Target_GetCurSpec().m_backend_c.m_codegen_mode == CodegenMode::Gnu11;
+    ::std::unordered_set<::std::string> upstream_instances;
+    if( share_instances )
+    {
+        for(const auto& ec : crate_ptr->m_ext_crates)
+            read_shared_instances(ec.second.m_path, upstream_instances);
+    }
+    ::std::set<const ::HIR::Path*> shared;
+    if( !upstream_instances.empty() )
+    {
+        for(const auto& ent : list.m_functions)
+            if( upstream_instances.count(FMT(Trans_Mangle(ent.first))) )
+                shared.insert(&ent.first);
+    }
+
     // 2. Emit function prototypes
     for(const auto& ent : list.m_functions)
     {
@@ -111,7 +166,10 @@ void Trans_Codegen(const ::std::string& outfile, CodegenOutput out_ty, const Tra
         // Extern if there isn't any HIR
         bool is_extern = ! static_cast<bool>(fcn.m_code);
         if( fcn.m_code.m_mir && !ent.second->force_prototype ) {
-            codegen->emit_function_proto(ent.first, fcn, ent.second->pp, is_extern);
+            if( shared.count(&ent.first) )
+                codegen->emit_shared_proto(ent.first, fcn, ent.second->pp);
+            else
+                codegen->emit_function_proto(ent.first, fcn, ent.second->pp, is_extern);
         }
     }
     // - External functions
@@ -174,7 +232,7 @@ void Trans_Codegen(const ::std::string& outfile, CodegenOutput out_ty, const Tra
     // 4. Emit function code
     for(const auto& ent : list.m_functions)
     {
-        if( ent.second->ptr && ent.second->ptr->m_code.m_mir && !ent.second->force_prototype )
+        if( ent.second->ptr && ent.second->ptr->m_code.m_mir && !ent.second->force_prototype && shared.count(&ent.first) == 0 )
         {
             const auto& path = ent.first;
             const auto& fcn = *ent.second->ptr;
@@ -197,6 +255,29 @@ void Trans_Codegen(const ::std::string& outfile, CodegenOutput out_ty, const Tra
                 codegen->emit_function_code(path, fcn, pp, is_extern,  fcn.m_code.m_mir);
             }
         }
+    }
+    if( share_instances && out_ty == CodegenOutput::StaticLibrary )
+    {
+        ::std::ofstream os(outfile + ".shared.tmp");
+        for(const auto& ent : list.m_functions)
+        {
+            const auto* fcn = ent.second->ptr;
+            if( !fcn || !fcn->m_code.m_mir || ent.second->force_prototype || shared.count(&ent.first) || fcn->m_linkage.name != "" )
+                continue;
+            if( static_cast<bool>(fcn->m_code) && !ent.second->pp.has_types() )
+                continue;
+            // Small instances stay local for gcc's early inliner, since sharing every instance slowed the resulting rustc by 40%
+            const auto& mir = ent.second->monomorphised.code ? *ent.second->monomorphised.code : *fcn->m_code.m_mir;
+            size_t size = 0;
+            for(const auto& bb : mir.blocks)
+                size += 1 + bb.statements.size();
+            if( size < 32 )
+                continue;
+            os << Trans_Mangle(ent.first) << "\n";
+            codegen->emit_shared_alias(ent.first, *fcn, ent.second->pp);
+        }
+        os.close();
+        rename((outfile + ".shared.tmp").c_str(), (outfile + ".shared").c_str());
     }
     list.m_functions.clear();
 

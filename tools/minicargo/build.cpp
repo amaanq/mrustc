@@ -1137,13 +1137,14 @@ RunnableJob Job_Codegen::start()
     // mrustc's forked child writes the command file once the C is ready, and at equal priority gcc's LTO partitions tripled the frontend jobs' LoadCrates time building rustc
     const auto* exe = getenv("SHELL");
     env.push_back("CODEGEN_SCRIPT", this->m_command_file.str());
+    env.push_back("CODEGEN_PID", this->m_rlib_outfile.str() + ".codegen-pid");
     args.push_back("-c");
     args.push_back(
-        "f=\"$CODEGEN_SCRIPT\"; p=\"$f.pid\"; "
+        "f=\"$CODEGEN_SCRIPT\"; p=\"$CODEGEN_PID\"; "
         "while [ ! -e \"$f\" ]; do "
         "if [ -e \"$p\" ] && ! kill -0 \"$(cat \"$p\")\" 2>/dev/null && [ ! -e \"$f\" ]; then echo \"codegen for $f exited early\" >&2; exit 1; fi; "
         "sleep 0.05; done; "
-        "rm -f \"$p\"; exec nice -n 10 \"$SHELL\" \"$f\""
+        "exec nice -n 10 \"$SHELL\" \"$f\""
         );
     #endif
     return RunnableJob(exe, std::move(args), std::move(env), helpers::path());

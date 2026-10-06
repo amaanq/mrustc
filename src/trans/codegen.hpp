@@ -51,6 +51,10 @@ public:
     virtual void emit_function_ext(const ::HIR::Path& p, const ::HIR::Function& item, const Trans_Params& params) {}
     virtual void emit_function_proto(const ::HIR::Path& p, const ::HIR::Function& item, const Trans_Params& params, bool is_extern_def) {}
     virtual void emit_function_code(const ::HIR::Path& p, const ::HIR::Function& item, const Trans_Params& params, bool is_extern_def, const ::MIR::FunctionPointer& code) = 0;
+    /// Export an emitted instance under its shared name, for downstream crates to link to
+    virtual void emit_shared_alias(const ::HIR::Path& p, const ::HIR::Function& item, const Trans_Params& params) {}
+    /// Declare an instance that a dependency emitted, by its shared name
+    virtual void emit_shared_proto(const ::HIR::Path& p, const ::HIR::Function& item, const Trans_Params& params) {}
 
     virtual void emit_global_asm(const ::HIR::GlobalAssembly& ) = 0;
 };
