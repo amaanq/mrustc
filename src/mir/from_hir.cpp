@@ -820,22 +820,31 @@ namespace {
                 &m_builder.resolve().m_crate.get_enum_by_path(sp, lang_Poll)
             );
             auto lv_poll = m_builder.new_temporary(type_poll);
+            // Context is the second argument (first is `self`)
+            auto lv_cx_src = ::MIR::LValue::new_Argument(1);
+            ::HIR::TypeRef  type_cx;
+            m_builder.with_val_type(sp, lv_cx_src, [&](const auto& ty){ type_cx = ty.clone(); });
+            auto lv_cx = m_builder.lvalue_or_temp(sp, type_cx, ::MIR::RValue::make_Borrow({ ::HIR::BorrowType::Unique, false, ::MIR::LValue::new_Deref(std::move(lv_cx_src)) }));
+            ::HIR::PathParams   poll_params;
+            {
+                const auto& lang_Future = m_builder.resolve().m_lang_Future;
+                const auto& poll_fn = m_builder.resolve().m_crate.get_trait_by_path(sp, lang_Future).m_values.at("poll").as_Function();
+                poll_params.m_lifetimes.resize(poll_fn.m_params.m_lifetimes.size());
+            }
             {
                 auto bb_ret = m_builder.new_bb_unlinked();
                 auto bb_panic = m_builder.new_bb_unlinked();
                 m_builder.end_block(::MIR::Terminator::make_Call({
                     bb_ret, bb_panic,
                     lv_poll.clone(),
-                    ::HIR::Path(ty_inner.clone(), m_builder.resolve().m_lang_Future, "poll" ),
+                    ::HIR::Path(ty_inner.clone(), m_builder.resolve().m_lang_Future, "poll", std::move(poll_params) ),
                     make_vec2(
                         ::MIR::Param(lv_pin.clone()),
-                        ::MIR::Param::make_Borrow({
-                            ::HIR::BorrowType::Unique,
-                            ::MIR::LValue::new_Deref(::MIR::LValue::new_Argument(1))    // Context is the second argument (first is `self`)
-                        })
+                        ::MIR::Param(lv_cx.clone())
                     )
                 }));
                 m_builder.moved_lvalue(node.span(), std::move(lv_pin));
+                m_builder.moved_lvalue(node.span(), std::move(lv_cx));
                 m_builder.set_cur_block(bb_panic);
                 emit_unwind(sp);
                 m_builder.set_cur_block(bb_ret);
