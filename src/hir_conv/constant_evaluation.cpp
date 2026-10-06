@@ -2842,6 +2842,15 @@ namespace HIR {
                 else if( te->name == "unlikely" ) {
                     local_state.write_param(dst, e.args.at(0));
                 }
+                else if( te->name == "simd_splat" ) {
+                    size_t vec_size = local_state.size_of_or_bug(local_state.monomorph_expand(te->params.m_types.at(0)));
+                    size_t elem_size = local_state.size_of_or_bug(local_state.monomorph_expand(te->params.m_types.at(1)));
+                    MIR_ASSERT(state, elem_size > 0 && vec_size % elem_size == 0, "simd_splat of " << elem_size << " into " << vec_size);
+                    for(size_t ofs = 0; ofs < vec_size; ofs += elem_size) {
+                        auto slot = dst.slice(ofs, elem_size);
+                        local_state.write_param(slot, e.args.at(0));
+                    }
+                }
                 else if( te->name == "assume" ) {
                     auto val = local_state.read_param_uint(8, e.args.at(0));
                     MIR_ASSERT(state, val != 0, "`assume` failed");
