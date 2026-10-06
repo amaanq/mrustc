@@ -858,8 +858,7 @@ namespace static_borrow_constants {
                     for( auto& pb : pat.m_bindings )
                     {
                         auto idx = static_cast<unsigned>(binding_mapping.size());
-                        binding_mapping.insert(::std::make_pair(pb.m_slot, idx));
-                        pb.m_slot = idx;
+                        pb.m_slot = binding_mapping.insert(::std::make_pair(pb.m_slot, idx)).first->second;
                     }
 
                     if(auto* e = pat.m_data.opt_SplitSlice())
@@ -867,8 +866,7 @@ namespace static_borrow_constants {
                         if( e->extra_bind.is_valid() )
                         {
                             auto idx = static_cast<unsigned>(binding_mapping.size());
-                            binding_mapping.insert(::std::make_pair(e->extra_bind.m_slot, idx));
-                            e->extra_bind.m_slot = idx;
+                            e->extra_bind.m_slot = binding_mapping.insert(::std::make_pair(e->extra_bind.m_slot, idx)).first->second;
                         }
                     }
                 }
