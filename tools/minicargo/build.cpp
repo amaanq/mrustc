@@ -1134,9 +1134,17 @@ RunnableJob Job_Codegen::start()
     args.push_back("/c");
     args.push_back(std::move(line));
     #else
+    // At equal priority, gcc's LTO partitions tripled the frontend jobs' LoadCrates time building rustc
     const auto* exe = getenv("SHELL");
+    std::string quoted;
+    for(char c : line) {
+        if( c == '\'' )
+            quoted += "'\\''";
+        else
+            quoted += c;
+    }
     args.push_back("-c");
-    args.push_back(std::move(line));
+    args.push_back("exec nice -n 10 \"$SHELL\" -c '" + quoted + "'");
     #endif
     return RunnableJob(exe, std::move(args), std::move(env), helpers::path());
 }
