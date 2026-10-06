@@ -5,6 +5,8 @@
  * hir_expand/lifetime_infer.cpp
  * - Infer and check lifetime annotations
  */
+#include <list>
+#include <hir_typeck/common.hpp>
 #include <hir/visitor.hpp>
 #include <hir/expr.hpp>
 #include <hir_typeck/static.hpp>
@@ -97,6 +99,8 @@ namespace {
         const StaticTraitResolve& m_resolve;
         bool    m_in_constant_context;
         std::vector<LifetimeBound>  m_bounds;
+        /// Field types monomorphised for implied bounds, which `m_bounds` points into
+        std::list<HIR::TypeRef>  m_implied_types;
         /// @brief Locally started/located lifetimes (i.e. borrows of locals/temporaries)
         std::vector<LocalLifetime>  m_locals;
         std::vector<IvarLifetime>   m_ivars;
@@ -2125,6 +2129,7 @@ namespace {
             struct TypeVisitor: public HIR::Visitor {
                 LifetimeInferState&     m_state;
                 std::vector<const HIR::LifetimeRef*>  m_stack;
+                std::vector<const HIR::Struct*>  m_adts;
                 TypeVisitor(LifetimeInferState& state): m_state(state) {}
 
                 void maybe_push_lifetime_bound(const HIR::LifetimeRef& test, const HIR::LifetimeRef& valid_for) {
@@ -2164,9 +2169,30 @@ namespace {
                     if(const auto* te = ty.data().opt_TraitObject()) {
                         check_lifetime_variant(te->m_lifetime);
                     }
-                    if( /*const auto* te =*/ ty.data().opt_Path() ) {
+                    if( const auto* te = ty.data().opt_Path() ) {
                         if( !m_stack.empty() && m_stack.back() ) {
                             m_state.add_type_lifetime_bound(ty, *m_stack.back());
+                        }
+                        // A struct implies the bounds its fields need, e.g. `RefOrMut<'r, Resolver<'ra>>` holds `&'r mut Resolver<'ra>` so `'ra: 'r`
+                        if( te->binding.is_Struct() && te->path.m_data.is_Generic() && m_adts.empty() ) {
+                            const auto& str = *te->binding.as_Struct();
+                            MonomorphStatePtr   ms(nullptr, &te->path.m_data.as_Generic().m_params, nullptr);
+                            m_adts.push_back(&str);
+                            auto visit_field = [&](const HIR::TypeRef& fty) {
+                                if( !monomorphise_type_needed(fty) || visit_ty_with(fty, [](const HIR::TypeRef& t){ return t.data().is_Function() || t.data().is_TraitObject() || t.data().is_ErasedType(); }) )
+                                    return;
+                                m_state.m_implied_types.push_back(ms.monomorph_type(Span(), fty, false));
+                                this->visit_type(m_state.m_implied_types.back());
+                            };
+                            if( const auto* fe = str.m_data.opt_Tuple() ) {
+                                for(const auto& f : *fe)
+                                    visit_field(f.ent);
+                            }
+                            else if( const auto* fe = str.m_data.opt_Named() ) {
+                                for(const auto& f : *fe)
+                                    visit_field(f.ty);
+                            }
+                            m_adts.pop_back();
                         }
                     }
                     if(ty.data().is_Generic()) {
