@@ -362,3 +362,67 @@
  
      let eax;
      let ebx;
+--- src/tools/cargo/src/cargo/util/local_poll_adapter.rs
++++ src/tools/cargo/src/cargo/util/local_poll_adapter.rs
+@@ -36,12 +36,61 @@
+     /// to pick up the result.
+     ///
+     /// Futures that complete immediately are not queued.
++    #[cfg(not(rust_compiler = "mrustc"))]
+     pub fn poll<F>(&mut self, f: F, key: K) -> Poll<Result<V, E>>
+     where
+         F: AsyncFn(&S::Target, &K) -> Result<V, E> + 'a,
+     {
+         match self.cache.get(&key) {
+             // We have a cached success value, clone it and return.
++            Some(Poll::Ready(Ok(v))) => return Poll::Ready(Ok(v.clone())),
++            // We have a cached error value, remove it and return.
++            // Errors are not Clone, so they are only stored once.
++            Some(Poll::Ready(Err(_))) => return self.cache.remove(&key).unwrap(),
++            // This key is already pending.
++            Some(Poll::Pending) => return Poll::Pending,
++            // Looks like we have work to do!
++            None => {}
++        }
++
++        // Created a pinned future that executes the function,
++        // returning the key and the result.
++        let mut future = {
++            let key = key.clone();
++            let self_parameter = self.self_parameter.clone();
++            async move {
++                let v = f(self_parameter.deref(), &key).await;
++                (key, v)
++            }
++            .boxed_local()
++        };
++
++        // Attempt to run the future immediately. If it has no `await` yields,
++        // it will return here.
++        if let Some((k, v)) = (&mut future).now_or_never() {
++            if let Ok(success) = &v {
++                // Only cache successful results.
++                self.cache.insert(k, Poll::Ready(Ok(success.clone())));
++            }
++            return Poll::Ready(v);
++        }
++
++        // Insert Pending into the cache so we avoid queuing the same future twice.
++        self.cache.insert(key.clone(), Poll::Pending);
++
++        // Add the future to the pending queue.
++        self.pool.push(future);
++        Poll::Pending
++    }
++
++    #[cfg(rust_compiler = "mrustc")]
++    pub fn poll<F, Fut>(&mut self, f: F, key: K) -> Poll<Result<V, E>>
++    where
++        F: Fn(&S::Target, &K) -> Fut + 'a,
++        Fut: std::future::Future<Output = Result<V, E>>,
++    {
++        match self.cache.get(&key) {
++            // We have a cached success value, clone it and return.
+             Some(Poll::Ready(Ok(v))) => return Poll::Ready(Ok(v.clone())),
+             // We have a cached error value, remove it and return.
+             // Errors are not Clone, so they are only stored once.
