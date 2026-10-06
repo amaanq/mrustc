@@ -2563,6 +2563,12 @@ namespace HIR {
                     auto ty = local_state.monomorph_expand(te->params.m_types.at(0));
                     dst.write_ptr(state, EncodedLiteral::PTR_BASE, StaticRefPtr::allocate(HIR::Path(mv$(ty), "#type_id"), nullptr));
                 }
+                else if( te->name == "type_id_eq" ) {
+                    const auto* a = local_state.read_param_ptr(e.args.at(0)).second.as_staticref();
+                    const auto* b = local_state.read_param_ptr(e.args.at(1)).second.as_staticref();
+                    MIR_ASSERT(state, a && b, "type_id_eq on a TypeId that isn't from type_id");
+                    dst.write_uint(state, 8, a->path() == b->path() ? 1 : 0);
+                }
                 else if( te->name == "needs_drop" ) {
                     auto ty = local_state.monomorph_expand(te->params.m_types.at(0));
                     dst.write_uint(state, 8, resolve.type_needs_drop_glue(state.sp, ty) ? 1 : 0);

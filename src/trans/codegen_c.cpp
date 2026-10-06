@@ -6413,6 +6413,13 @@ namespace {
                     m_of << ")";
                 }
             }
+            else if( name == "type_id_eq" ) {
+                ::HIR::TypeRef tmp;
+                const auto& ty = mir_res.get_param_type(tmp, e.args.at(0));
+                m_of << "{ "; emit_ctype(ty, FMT_CB(ss, ss << "a";)); m_of << " = "; emit_param(e.args.at(0));
+                m_of << "; "; emit_ctype(ty, FMT_CB(ss, ss << "b";)); m_of << " = "; emit_param(e.args.at(1));
+                m_of << "; "; emit_lvalue(e.ret_val); m_of << " = (0 == memcmp(&a, &b, sizeof(a))); }";
+            }
             else if( name == "type_name" ) {
                 auto name = mir_res.intrinsic_type_name(params.m_types.at(0));
                 emit_lvalue(e.ret_val); m_of << ".PTR = \"" << FmtEscaped(name) << "\";\n\t";

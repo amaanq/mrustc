@@ -574,6 +574,11 @@ class CHandler_RustcIntrinsic:
             if( !e->code() ) {
                 e->set_abi( "rust-intrinsic" );
             }
+            // 1.98's fallback body transmutes `TypeId` to `u128`, but a const-evaluated `TypeId` is a relocation that only compares by its target
+            else if( TARGETVER_LEAST_1_98 && path.nodes.back() == "type_id_eq" ) {
+                e->set_code( AST::Expr() );
+                e->set_abi( "rust-intrinsic" );
+            }
         }
         else {
             ERROR(sp, E0000, "#[rustc_intrinsic] on non-function");
