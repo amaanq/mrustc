@@ -143,6 +143,8 @@ struct PatternRulesetBuilder
     size_t subset_start, subset_end;
 
     field_path_t   m_field_path;
+    /// Rules for one arm only, so wildcards have no other arms' rules to line up with
+    bool    m_single_arm = false;
 
     PatternRulesetBuilder(const StaticTraitResolve& resolve):
         m_resolve(resolve)
@@ -265,6 +267,7 @@ void MIR_LowerHIR_Let(MirBuilder& builder, MirConverter& conv, const Span& sp, c
     auto pat_scope = builder.new_scope_split(sp);
 
     auto pat_builder = PatternRulesetBuilder { builder.resolve() };
+    pat_builder.m_single_arm = true;
     pat_builder.append_from(sp, pat, outer_ty);
     for(auto& sr : pat_builder.m_rulesets)
     {
@@ -1545,6 +1548,16 @@ void PatternRulesetBuilder::append_from(const Span& sp, const ::HIR::Pattern& pa
         m_field_path.push_back( FIELD_DEREF );
     }
     const auto& ty = *ty_p;
+
+    if( m_single_arm && pat.m_data.is_Any() )
+    {
+        this->push_rule( PatternRule::make_Any({}) );
+        for(size_t i = 0; i < pat.m_implicit_deref_count; i ++)
+        {
+            m_field_path.pop_back();
+        }
+        return ;
+    }
 
     // TODO: Outer handling for Value::Named patterns
     // - Convert them into either a pattern, or just a variant of this function that operates on ::HIR::Literal
