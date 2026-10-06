@@ -63,6 +63,10 @@ pub fn recv_token_stream<R: ::std::io::Read>(reader: R) -> TokenStream
                     span: crate::Span::call_site(),
                     val: crate::token_tree::LiteralValue::ByteString(val)
                     }.into(),
+                Token::CString(val) => Literal {
+                    span: crate::Span::call_site(),
+                    val: crate::token_tree::LiteralValue::CString(val)
+                    }.into(),
                 Token::Char(ch) => Literal {
                     span: crate::Span::call_site(),
                     val: crate::token_tree::LiteralValue::CharLit(ch),
@@ -156,6 +160,7 @@ pub fn send_token_stream<T: ::std::io::Write>(out_stream: T, ts: TokenStream)
                 {
                 LiteralValue::String(v) => Token::String(v),
                 LiteralValue::ByteString(v) => Token::ByteString(v),
+                LiteralValue::CString(v) => Token::CString(v),
                 LiteralValue::CharLit(v) => Token::Char(v),
                 LiteralValue::UnsignedInt(v, sz) => Token::Unsigned(v, sz),
                 LiteralValue::SignedInt(v, sz)   => Token::Signed(v, sz),

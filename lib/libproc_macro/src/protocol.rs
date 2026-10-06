@@ -10,6 +10,7 @@ pub enum Token
     Lifetime(String),
     String(String),
     ByteString(Vec<u8>),
+    CString(Vec<u8>),
     Char(char),
     Unsigned(u128, u8),
     Signed(i128, u8),
@@ -61,6 +62,7 @@ impl<R: ::std::io::Read> Reader<R>
         3 => Token::Lifetime(self.get_string()),
         4 => Token::String(self.get_string()),
         5 => Token::ByteString(self.get_byte_vec()),
+        12 => Token::CString(self.get_byte_vec()),
         6 => Token::Char({
             let v = self.get_u128v();
             assert!(v < 0x10FFFF, "Protocol error: malformed char literal {:#x}", v);
@@ -184,6 +186,7 @@ impl<T: ::std::io::Write> Writer<T>
         Token::Lifetime(v)     => { self.putb(3); self.put_bytes(v.as_bytes()); },
         Token::String(v)       => { self.putb(4); self.put_bytes(v.as_bytes()); },
         Token::ByteString(v)   => { self.putb(5); self.put_bytes(&v[..]); },
+        Token::CString(v)      => { self.putb(12); self.put_bytes(&v[..]); },
         Token::Char(v)         => { self.putb(6); self.put_u128v(v as u32 as u128); },
         Token::Unsigned(v, sz) => { self.putb(7); self.putb(sz); self.put_u128v(v); },
         Token::Signed(v, sz)   => { self.putb(8); self.putb(sz); self.put_i128v(v); },

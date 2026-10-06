@@ -213,6 +213,7 @@ enum class TokenClass
     Float       = 9,
     SpanRef  = 10,
     SpanDef  = 11,
+    CString  = 12,
 };
 enum class FragType
 {
@@ -237,6 +238,7 @@ public:
     virtual void send_lifetime(const char* val) = 0;
     virtual void send_string(const ::std::string& s) = 0;
     virtual void send_bytestring(const ::std::string& s) = 0;
+    virtual void send_cstring(const ::std::string& s) = 0;
     virtual void send_char(uint32_t ch) = 0;
     virtual void send_int(eCoreType ct, U128 v) = 0;
     virtual void send_float(eCoreType ct, double v) = 0;
@@ -329,6 +331,10 @@ public:
     }
     void send_bytestring(const ::std::string& s) override {
         this->send_u8(static_cast<uint8_t>(TokenClass::ByteString));
+        this->send_bytes(s.data(), s.size());
+    }
+    void send_cstring(const ::std::string& s) override {
+        this->send_u8(static_cast<uint8_t>(TokenClass::CString));
         this->send_bytes(s.data(), s.size());
     }
     void send_char(uint32_t ch) override {
@@ -536,8 +542,7 @@ namespace {
             case TOK_FLOAT:     m_pmi.send_float(tok.datatype(), tok.floatval());   break;
             case TOK_STRING:        m_pmi.send_string(tok.str());       break;
             case TOK_BYTESTRING:    m_pmi.send_bytestring(tok.str());   break;
-            case TOK_CSTRING:
-                TODO(sp, "TOK_CSTRING");
+            case TOK_CSTRING:       m_pmi.send_cstring(tok.str());      break;
 
             case TOK_HASH:      m_pmi.send_symbol("#"); break;
             case TOK_UNDERSCORE:m_pmi.send_rword("_"); break;
@@ -1778,6 +1783,9 @@ namespace {
         void send_bytestring(const ::std::string& s) override {
             push(Token(TOK_BYTESTRING, s, Ident::Hygiene()));
         }
+        void send_cstring(const ::std::string& s) override {
+            push(Token(TOK_CSTRING, s, Ident::Hygiene()));
+        }
         void send_char(uint32_t ch) override {
             push(Token(U128(ch), CORETYPE_CHAR));
         }
@@ -2214,6 +2222,10 @@ Token ProcMacroInv::realGetToken_() {
     case TokenClass::ByteString: {
         auto val = this->recv_bytes();
         return Token(TOK_BYTESTRING, mv$(val), this->get_hygiene());
+        }
+    case TokenClass::CString: {
+        auto val = this->recv_bytes();
+        return Token(TOK_CSTRING, mv$(val), this->get_hygiene());
         }
     case TokenClass::CharLit: {
         auto val = this->recv_v128u();
