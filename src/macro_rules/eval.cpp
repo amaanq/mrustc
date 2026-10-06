@@ -965,7 +965,7 @@ namespace
             {
                 lex.consume();
             }
-            else if( lex.next() == TOK_LT || lex.next() == TOK_DOUBLE_LT )
+            else if( lex.next() == TOK_LT || lex.next() == TOK_DOUBLE_LT || lex.next() == TOK_THINARROW_LEFT )
             {
                 if( !consume_tt_angle(lex) )
                     return false;
@@ -1493,7 +1493,7 @@ namespace
                     {
                         if( lex.consume_if(TOK_DOUBLE_COLON) )
                         {
-                            if( !(lex.next() == TOK_LT || lex.next() == TOK_DOUBLE_LT) )
+                            if( !(lex.next() == TOK_LT || lex.next() == TOK_DOUBLE_LT || lex.next() == TOK_THINARROW_LEFT) )
                                 return false;
                             if( !consume_tt_angle(lex) )
                                 return false;

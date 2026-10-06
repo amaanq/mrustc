@@ -1144,6 +1144,9 @@ ExprNodeP Parse_ExprFC(TokenStream& lex)
                     if( lex.getTokenIf(TOK_DOUBLE_LT) ) {
                         lex.putback(Token(TOK_LT));
                     }
+                    else if( lex.getTokenIf(TOK_THINARROW_LEFT) ) {
+                        lex.putback(Token(TOK_DASH));
+                    }
                     else {
                         GET_CHECK_TOK(tok, lex, TOK_LT);
                     }
