@@ -965,7 +965,7 @@ namespace {
             // - If running in a mode after stablise (before defaults), fall
             //   back to trait if the inherent is still ambigious.
             ::std::vector<::std::pair<TraitResolution::AutoderefBorrow, ::HIR::Path>> possible_methods;
-            unsigned int deref_count = this->context.m_resolve.autoderef_find_method(node.span(), node.m_traits, node.m_trait_param_ivars, ty, node.m_method,  possible_methods, !this->m_is_fallback);
+            unsigned int deref_count = this->context.m_resolve.autoderef_find_method(node.span(), node.m_traits, node.m_trait_param_ivars, node.m_trait_param_val_ivars, ty, node.m_method,  possible_methods, !this->m_is_fallback);
         try_again:
             if( deref_count != ~0u )
             {
@@ -1064,8 +1064,12 @@ namespace {
                                     trait_params.m_types.push_back( ::HIR::TypeRef::new_infer(ivars[i], ::HIR::InferClass::None) );
                                     //ASSERT_BUG(sp, m_ivars.get_type( trait_params.m_types.back() ).m_data.as_Infer().index == ivars[i], "A method selection ivar was bound");
                                 }
-                                if(e1.trait.m_params.m_values.size() > 0) {
-                                    TODO(sp, "Populate infer for value generics");
+                                auto& val_ivars = node.m_trait_param_val_ivars;
+                                while(val_ivars.size() < e1.trait.m_params.m_values.size()) {
+                                    val_ivars.push_back(context.m_ivars.new_ivar_val());
+                                }
+                                for(size_t i = 0; i < e1.trait.m_params.m_values.size(); i++) {
+                                    trait_params.m_values.push_back( ::HIR::ConstGeneric::make_Infer({ val_ivars[i] }) );
                                 }
                                 // If one of these was already using the placeholder ivars, then maintain the one with the palceholders
                                 if( e1.trait.m_params != trait_params )
@@ -6228,7 +6232,7 @@ namespace
 
                 DEBUG("Check <" << t << ">::" << node.m_method);
                 ::std::vector<::std::pair<TraitResolution::AutoderefBorrow, ::HIR::Path>> possible_methods;
-                unsigned int deref_count = context.m_resolve.autoderef_find_method(node.span(), node.m_traits, node.m_trait_param_ivars, t, node.m_method,  possible_methods);
+                unsigned int deref_count = context.m_resolve.autoderef_find_method(node.span(), node.m_traits, node.m_trait_param_ivars, node.m_trait_param_val_ivars, t, node.m_method,  possible_methods);
                 DEBUG("> deref_count = " << deref_count << ", possible_methods={" << possible_methods << "}");
                 // TODO: Detect the above hitting an ivar, and use that instead of this hacky check of if it's `_` or `&_`
                 if( !(t.data().is_Infer() || TU_TEST1(t.data(), Borrow, .inner.data().is_Infer())) && possible_methods.empty() )

@@ -288,7 +288,7 @@ public:
     /// \return Number of times deref was applied (or ~0 if _ was hit)
     /// - `pause_on_fuzzy` also returns ~0 when only inherent impls matched, and only because of ivars
     unsigned int autoderef_find_method(const Span& sp,
-            const HIR::t_trait_list& traits, const ::std::vector<unsigned>& ivars, const ::HIR::TypeRef& top_ty, const RcString& method_name,
+            const HIR::t_trait_list& traits, const ::std::vector<unsigned>& ivars, const ::std::vector<unsigned>& val_ivars, const ::HIR::TypeRef& top_ty, const RcString& method_name,
             /* Out -> */::std::vector<::std::pair<AutoderefBorrow,::HIR::Path>>& possibilities,
             bool pause_on_fuzzy=false
             ) const;
@@ -320,7 +320,7 @@ public:
     };
     friend ::std::ostream& operator<<(::std::ostream& os, const AllowedReceivers& x);
     bool find_method(const Span& sp,
-            const HIR::t_trait_list& traits, const ::std::vector<unsigned>& ivars, const ::HIR::TypeRef& ty, const RcString& method_name, MethodAccess access,
+            const HIR::t_trait_list& traits, const ::std::vector<unsigned>& ivars, const ::std::vector<unsigned>& val_ivars, const ::HIR::TypeRef& ty, const RcString& method_name, MethodAccess access,
             AutoderefBorrow borrow_type, /* Out -> */::std::vector<::std::pair<AutoderefBorrow,::HIR::Path>>& possibilities
             ) const;
 

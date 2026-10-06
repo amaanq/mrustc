@@ -1576,7 +1576,8 @@ namespace typecheck
             const RcString& method_name = node.m_method;
             ::HIR::t_trait_list    possible_traits;
             unsigned int max_num_params = 0;
-            auto visit_trait_inner = [&method_name, &max_num_params, &possible_traits](const HIR::SimplePath& p, const HIR::Trait& tr, bool push) {
+            unsigned int max_num_vals = 0;
+            auto visit_trait_inner = [&method_name, &max_num_params, &max_num_vals, &possible_traits](const HIR::SimplePath& p, const HIR::Trait& tr, bool push) {
 
                 auto it = tr.m_values.find(method_name);
                 if( it == tr.m_values.end() )
@@ -1585,6 +1586,8 @@ namespace typecheck
                     return ;
                 if( tr.m_params.m_types.size() > max_num_params )
                     max_num_params = tr.m_params.m_types.size();
+                if( tr.m_params.m_values.size() > max_num_vals )
+                    max_num_vals = tr.m_params.m_values.size();
 
                 if( push ) {
                     DEBUG("Found method in " << p << " (push)");
@@ -1619,6 +1622,10 @@ namespace typecheck
             for(unsigned int i = 0; i < max_num_params; i ++)
             {
                 node.m_trait_param_ivars.push_back( this->context.m_ivars.new_ivar() );
+            }
+            for(size_t i = 0; i < max_num_vals; i ++)
+            {
+                node.m_trait_param_val_ivars.push_back( this->context.m_ivars.new_ivar_val() );
             }
 
             {

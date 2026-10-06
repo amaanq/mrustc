@@ -649,6 +649,7 @@ struct ExprNode_CallMethod:
     t_trait_list    m_traits;
     // - A pool of ivars to use for searching for trait impls
     ::std::vector<unsigned int> m_trait_param_ivars;
+    ::std::vector<unsigned int> m_trait_param_val_ivars;
 
     ExprNode_CallMethod(Span sp, ::HIR::ExprNodeP val, RcString method_name, ::HIR::PathParams params, ::std::vector< ::HIR::ExprNodeP> args):
         ExprNode( mv$(sp) ),

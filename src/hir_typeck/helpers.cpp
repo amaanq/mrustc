@@ -4758,7 +4758,7 @@ const ::HIR::TypeRef* TraitResolution::autoderef(const Span& sp, const ::HIR::Ty
 }
 
 unsigned int TraitResolution::autoderef_find_method(const Span& sp,
-        const HIR::t_trait_list& traits, const ::std::vector<unsigned>& ivars, const ::HIR::TypeRef& top_ty, const RcString& method_name,
+        const HIR::t_trait_list& traits, const ::std::vector<unsigned>& ivars, const ::std::vector<unsigned>& val_ivars, const ::HIR::TypeRef& top_ty, const RcString& method_name,
         /* Out -> */::std::vector<::std::pair<AutoderefBorrow,::HIR::Path>>& possibilities,
         bool pause_on_fuzzy
         ) const
@@ -4803,24 +4803,24 @@ unsigned int TraitResolution::autoderef_find_method(const Span& sp,
         m_inherent_was_fuzzy = false;
 
         // Non-referenced
-        if( this->find_method(sp, traits, ivars, ty, method_name,  cur_access, AutoderefBorrow::None, possibilities) )
+        if( this->find_method(sp, traits, ivars, val_ivars, ty, method_name,  cur_access, AutoderefBorrow::None, possibilities) )
         {
             DEBUG("FOUND *{" << deref_count << "}, fcn_path = " << possibilities.back().second);
         }
 
         // Auto-ref
         auto borrow_ty = ::HIR::TypeRef::new_borrow(::HIR::BorrowType::Shared, ty.clone());
-        if( this->find_method(sp, traits, ivars, borrow_ty, method_name,  MethodAccess::Move, AutoderefBorrow::Shared, possibilities) )
+        if( this->find_method(sp, traits, ivars, val_ivars, borrow_ty, method_name,  MethodAccess::Move, AutoderefBorrow::Shared, possibilities) )
         {
             DEBUG("FOUND & *{" << deref_count << "}, fcn_path = " << possibilities.back().second);
         }
         borrow_ty.get_unique().as_Borrow().type = ::HIR::BorrowType::Unique;
-        if( cur_access >= MethodAccess::Unique && this->find_method(sp, traits, ivars, borrow_ty, method_name,  MethodAccess::Move, AutoderefBorrow::Unique, possibilities) )
+        if( cur_access >= MethodAccess::Unique && this->find_method(sp, traits, ivars, val_ivars, borrow_ty, method_name,  MethodAccess::Move, AutoderefBorrow::Unique, possibilities) )
         {
             DEBUG("FOUND &mut *{" << deref_count << "}, fcn_path = " << possibilities.back().second);
         }
         borrow_ty.get_unique().as_Borrow().type = ::HIR::BorrowType::Owned;
-        if( cur_access >= MethodAccess::Move && this->find_method(sp, traits, ivars, borrow_ty, method_name,  MethodAccess::Move, AutoderefBorrow::Owned, possibilities) )
+        if( cur_access >= MethodAccess::Move && this->find_method(sp, traits, ivars, val_ivars, borrow_ty, method_name,  MethodAccess::Move, AutoderefBorrow::Owned, possibilities) )
         {
             DEBUG("FOUND &move *{" << deref_count << "}, fcn_path = " << possibilities.back().second);
         }
@@ -4990,7 +4990,7 @@ const ::HIR::TypeRef* TraitResolution::check_method_receiver(const Span& sp, con
 }
 
 bool TraitResolution::find_method(const Span& sp,
-    const HIR::t_trait_list& traits, const ::std::vector<unsigned>& ivars, const ::HIR::TypeRef& ty, const RcString& method_name, MethodAccess access,
+    const HIR::t_trait_list& traits, const ::std::vector<unsigned>& ivars, const ::std::vector<unsigned>& val_ivars, const ::HIR::TypeRef& ty, const RcString& method_name, MethodAccess access,
     AutoderefBorrow borrow_type, /* Out -> */::std::vector<::std::pair<AutoderefBorrow,::HIR::Path>>& possibilities
     ) const
 {
@@ -5007,7 +5007,10 @@ bool TraitResolution::find_method(const Span& sp,
             trait_params.m_types.push_back( ::HIR::TypeRef::new_infer(ivars[i], ::HIR::InferClass::None) );
             ASSERT_BUG(sp, m_ivars.get_type( trait_params.m_types.back() ).data().as_Infer().index == ivars[i], "A method selection ivar was bound");
         }
-        ASSERT_BUG(sp, tpl.m_values.empty(), "TODO: Handle value params");
+        ASSERT_BUG(sp, tpl.m_values.size() <= val_ivars.size(), "Not enough value ivars allocated for method: " << tpl.m_values.size() << " needed but " << val_ivars.size() << " allocated by caller");
+        for(size_t i = 0; i < tpl.m_values.size(); i++) {
+            trait_params.m_values.push_back( ::HIR::ConstGeneric::make_Infer({ val_ivars[i] }) );
+        }
         return trait_params;
         };
 
