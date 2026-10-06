@@ -1071,7 +1071,7 @@ void Trans_AutoImpls(::HIR::Crate& crate, TransList& trans_list)
                             has_drop = true;
                         }
 
-                        if( ty.data().is_Path() && ty.data().as_Path().is_generator() ) {
+                        if( ty.data().is_Path() && (ty.data().as_Path().is_generator() || ty.data().as_Path().is_future()) ) {
                             ASSERT_BUG(sp, has_drop, "");
                             // Generators use a custom Drop impl that handles dropping values
                         }

@@ -193,7 +193,7 @@ namespace {
             for(size_t i = 0; i < n_captures; i ++)
             {
                 // TODO: State tracking on captures, what if a by-value capture is moved?
-                if( mappings.count(arg_count+i) == 0 ) {
+                if( mappings.count(arg_count+i) != 0 ) {
                     out_builder.push_stmt_drop(sp, ::MIR::LValue::new_Field(self.clone(), 1+i));
                 }
             }
