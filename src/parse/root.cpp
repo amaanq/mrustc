@@ -785,6 +785,10 @@ AST::Named<AST::Item> Parse_Trait_Item(TokenStream& lex)
     }
     // TODO: Mark specialisation
     (void)is_specialisable;
+    // 1.98 - impls cannot override a `final fn`, which only rustc checks
+    if( tok.type() == TOK_RWORD_FINAL ) {
+        GET_TOK(tok, lex);
+    }
 
     std::string abi = ABI_RUST;
     AST::Function::Flags    fn_flags;
@@ -1954,6 +1958,32 @@ namespace {
     ::AST::Item item_data;
 
     auto vis = Parse_Publicity(lex);
+
+    // 1.98 - `impl(crate)` restricts where a trait can be implemented, which only rustc checks
+    if( lex.lookahead(0) == TOK_RWORD_IMPL && lex.lookahead(1) == TOK_PAREN_OPEN )
+    {
+        switch( lex.lookahead(2) )
+        {
+        case TOK_RWORD_SELF:
+        case TOK_RWORD_CRATE:
+        case TOK_RWORD_SUPER:
+        case TOK_RWORD_IN:
+            GET_TOK(tok, lex);
+            GET_TOK(tok, lex);
+            for(unsigned depth = 1; depth > 0; ) {
+                switch( GET_TOK(tok, lex) )
+                {
+                case TOK_PAREN_OPEN:    depth ++;   break;
+                case TOK_PAREN_CLOSE:   depth --;   break;
+                case TOK_EOF:   throw ParseError::Unexpected(lex, tok, TOK_PAREN_CLOSE);
+                default:    break;
+                }
+            }
+            break;
+        default:
+            break;
+        }
+    }
 
     switch( GET_TOK(tok, lex) )
     {
