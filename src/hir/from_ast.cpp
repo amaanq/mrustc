@@ -1639,7 +1639,16 @@ namespace {
                     lifetime_bound = mv$(be.valid_for);
                     }
                 TU_ARMA(TraitBound, be) {
-                    ASSERT_BUG(item.span, be.type.data().as_Generic().binding == GENERIC_Self, be.type);
+                    // `type A: Tr<B: Bound>` arrives split as `<Self as Tr>::B: Bound`, and typeck reads implied item bounds from the `Tr` path
+                    if( !TU_TEST1(be.type.data(), Generic, .binding == GENERIC_Self) ) {
+                        const auto* pe = TU_TEST1(be.type.data(), Path, .path.m_data.is_UfcsKnown()) ? &be.type.data().as_Path().path.m_data.as_UfcsKnown() : nullptr;
+                        ASSERT_BUG(item.span, pe && TU_TEST1(pe->type.data(), Generic, .binding == GENERIC_Self), be.type);
+                        auto it = ::std::find_if(trait_bounds.begin(), trait_bounds.end(), [&](const ::HIR::TraitPath& tp){ return tp.m_path == pe->trait; });
+                        ASSERT_BUG(item.span, it != trait_bounds.end(), "No bound for " << pe->trait << " to hold " << be.type);
+                        auto ins = it->m_trait_bounds.insert(::std::make_pair(pe->item, ::HIR::TraitPath::AtyBound { pe->trait.clone(), pe->params.clone(), {} }));
+                        ins.first->second.traits.push_back( mv$(be.trait) );
+                        break;
+                    }
                     trait_bounds.push_back( mv$(be.trait) );
                     }
                 TU_ARMA(Lifetime, be) {
