@@ -6307,8 +6307,7 @@ void MIR_OptimiseCrate_Inlining(const ::HIR::Crate& crate, TransList& list, bool
             auto& hir_fcn = *const_cast<::HIR::Function*>(fcn_ent.second->ptr);
             auto& mono_fcn = fcn_ent.second->monomorphised;
 
-            ::std::string s = FMT(path);
-            ::HIR::ItemPath ip(s);
+            ::HIR::ItemPath ip(path);
 
             if( mono_fcn.code )
             {
