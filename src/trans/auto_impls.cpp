@@ -14,6 +14,7 @@
 #include <hir_typeck/common.hpp>    // monomorph
 #include <hir_typeck/static.hpp>    // StaticTraitResolve
 #include <deque>
+#include <set>
 #include <algorithm>    // find_if
 #include <trans/target.hpp>
 #include <mir/operations.hpp>
@@ -760,6 +761,11 @@ void Trans_AutoImpls(::HIR::Crate& crate, TransList& trans_list)
             auto* e = trans_list.add_static(ent.first.clone());
             e->ptr = trans_list.m_auto_statics.back().get();
         }
+        ::std::set<::HIR::TypeRef> shallow_types;
+        for(const auto& v : trans_list.m_types) {
+            if( !v.second )
+                shallow_types.insert(v.first.clone());
+        }
         for(const auto& ent : trans_list.m_vtables)
         {
             Span    sp;
@@ -785,9 +791,7 @@ void Trans_AutoImpls(::HIR::Crate& crate, TransList& trans_list)
             auto vtable_ty = ::HIR::TypeRef::new_path( ::HIR::GenericPath(mv$(vtable_sp), mv$(vtable_params)), &vtable_ref );
 
             // Ensure that the type is defined/populated
-            if( !std::any_of(trans_list.m_types.begin(), trans_list.m_types.end(), [&](const ::std::pair<HIR::TypeRef,bool>& v) {
-                return v.first == vtable_ty && v.second == false;
-                }) ) {
+            if( shallow_types.insert(vtable_ty.clone()).second ) {
                 trans_list.m_types.push_back(std::make_pair( vtable_ty.clone(), false ));
             }
 
