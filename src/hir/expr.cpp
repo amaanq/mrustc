@@ -327,6 +327,8 @@ DEF_VISIT_H(ExprNode_AsyncBlock, node) {
     }
     else
     {
+        for(auto& cap : node.m_captures)
+            visit_node_ptr(cap);
     }
 }
 
