@@ -819,7 +819,7 @@ void RustPrinter::handle_module(const AST::Module& mod)
                 m_os << "::*";
             }
             else if( ent.path.nodes().size() > 0 && ent.name != ent.path.nodes().back().name() ) {
-                m_os << " as " << ent.name;
+                m_os << " as " << (ent.name.c_str()[0] == ' ' ? "_" : ent.name.c_str());
             }
             else {
             }
