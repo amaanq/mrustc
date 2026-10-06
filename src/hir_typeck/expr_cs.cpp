@@ -2854,6 +2854,13 @@ void Context::handle_pattern(const Span& sp, ::HIR::Pattern& pat, const ::HIR::T
                 }
                 const auto& ty = *ty_p;
 
+                // 1.97 - deref patterns: a non-`box` pattern against `Box<T>` matches the boxed value
+                if( TU_TEST2(ty.data(), Path, .path.m_data, Generic, .m_path == context.m_lang_Box) && !pattern.m_data.is_Box() )
+                {
+                    auto inner = ::std::make_unique<::HIR::Pattern>(::std::vector<::HIR::PatternBinding>(), mv$(pattern.m_data));
+                    pattern.m_data = ::HIR::Pattern::Data::make_Box({ mv$(inner) });
+                }
+
                 // Here we have a known type and binding mode for this pattern
                 // - Time to handle this pattern then recurse into sub-patterns
 
