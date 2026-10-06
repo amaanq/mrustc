@@ -22,6 +22,8 @@ using AST::ExprNode;
 using AST::ExprNodeP;
 // TODO: Use a ProtoSpan instead of a point span?
 static inline ExprNodeP mk_exprnodep(const TokenStream& lex, AST::ExprNode* en){en->set_span(lex.point_span()); return ExprNodeP(en); }
+// 1.97 - `const |x| ..` closures are callable in const contexts, constness is not tracked
+static bool is_closure_start(eTokenType t) { return t == TOK_RWORD_MOVE || t == TOK_PIPE || t == TOK_DOUBLE_PIPE; }
 #define NEWNODE(type, ...)  mk_exprnodep(lex, new type(__VA_ARGS__))
 
 ExprNodeP Parse_ExprBlockNode(TokenStream& lex, AST::ExprNode_Block::Type ty, Ident label=Ident(""));
@@ -170,7 +172,7 @@ ExprNodeP Parse_ExprBlockLine_WithItems(TokenStream& lex, ::std::shared_ptr<AST:
         return ExprNodeP();
     // 'const' - Check if the next token isn't a `{`, if so it's an item. Otherwise, fall through
     case TOK_RWORD_CONST:
-        if( LOOK_AHEAD(lex) != TOK_BRACE_OPEN )
+        if( LOOK_AHEAD(lex) != TOK_BRACE_OPEN && !is_closure_start(LOOK_AHEAD(lex)) )
         {
             PUTBACK(tok, lex);
             if( !local_mod ) {
@@ -305,6 +307,10 @@ ExprNodeP Parse_ExprBlockLine(TokenStream& lex, bool *add_silence)
             break;
         default:
             break;
+        }
+
+        if( tok.type() == TOK_RWORD_CONST && is_closure_start(LOOK_AHEAD(lex)) ) {
+            GET_TOK(tok, lex);
         }
 
         switch( tok.type() )
@@ -1401,6 +1407,8 @@ ExprNodeP Parse_ExprVal_Inner(TokenStream& lex)
     case TOK_RWORD_UNSAFE:
         return Parse_ExprBlockNode(lex, AST::ExprNode_Block::Type::Unsafe);
     case TOK_RWORD_CONST:
+        if( is_closure_start(LOOK_AHEAD(lex)) )
+            return Parse_ExprVal_Closure(lex);
         return Parse_ExprBlockNode(lex, AST::ExprNode_Block::Type::Const);
 
     // Paths
