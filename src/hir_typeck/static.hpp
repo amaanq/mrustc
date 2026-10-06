@@ -12,6 +12,7 @@
 #include "impl_ref.hpp"
 #include <range_vec_map.hpp>
 #include "resolve_common.hpp"
+#include <unordered_map>
 
 enum class MetadataType {
     Unknown,    // Unknown still
@@ -40,10 +41,10 @@ class StaticTraitResolve:
     mutable ::std::map< ::HIR::TypeRef, bool >  m_copy_cache;
     mutable ::std::map< ::HIR::TypeRef, bool >  m_clone_cache;
     mutable ::std::map< ::HIR::TypeRef, bool >  m_drop_cache;
-    mutable ::std::map< std::string, HIR::TypeRef>  m_aty_cache;
+    mutable ::std::unordered_map< std::string, HIR::TypeRef>  m_aty_cache;
 
     /// Cache of the result of find_impl__check_crate_raw
-    mutable ::std::map< std::string, std::pair<HIR::PathParams,HIR::Compare> >   m_cached_impl_checks;
+    mutable ::std::unordered_map< std::string, std::pair<HIR::PathParams,HIR::Compare> >   m_cached_impl_checks;
 
 public:
     explicit StaticTraitResolve(const ::HIR::Crate& crate):
