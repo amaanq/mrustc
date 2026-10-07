@@ -1,3 +1,14 @@
+--- compiler/rustc_codegen_ssa/src/target_features.rs
++++ compiler/rustc_codegen_ssa/src/target_features.rs
+@@ -56,7 +56,7 @@
+                 hint,
+                 cross_arch: {
+                     let arches = rustc_target::target_features::feature_to_arch_names(feature_str);
+-                    match arches {
++                    match *arches.as_slice() {
+                         [] => None,
+                         [arch] => Some(CrossArchFeatureNote::Single { feature: feature_str, arch }),
+                         [..] => Some(CrossArchFeatureNote::Multiple {
 --- compiler/rustc_errors/src/lib.rs
 +++ compiler/rustc_errors/src/lib.rs
 @@ -88,6 +88,7 @@
