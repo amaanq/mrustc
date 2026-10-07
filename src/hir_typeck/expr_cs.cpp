@@ -5784,6 +5784,8 @@ namespace {
 
             const auto& ty = context.get_type(v.impl_ty);
             bool is_known = !ty.data().is_Infer() && !(ty.data().is_Path() && ty.data().as_Path().binding.is_Unbound());
+            // An impl's nested bound can fail only because of an inner ivar, e.g. `Option<(<?Bx as BackendTypes>::BasicBlock, _)>: Clone` before `Bx` is known
+            is_known &= !context.m_ivars.type_contains_ivars(v.impl_ty);
             //bool is_known = !context.m_ivars.type_contains_ivars(v.impl_ty);
             //for(const auto& t : v.params.m_types)
             //    is_known &= !context.m_ivars.type_contains_ivars(t);
