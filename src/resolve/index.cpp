@@ -73,13 +73,15 @@ void _add_item(const Span& sp, AST::Module& mod, IndexName location, const RcStr
         ASSERT_BUG(sp, ir.m_class.as_Absolute().nodes.size() > 0, "Non-namespace path must have nodes - " << location << " " << name << " = " << ir);
     }
 
-    // Add traits to a separate list
-    if( ir.m_bindings.type.binding.is_Trait() ) {
-        auto it = std::find(mod.m_traits.begin(), mod.m_traits.end(), ir.m_bindings.type.path);
-        if(it == mod.m_traits.end() ) {
-            mod.m_traits.push_back( ir.m_bindings.type.path );
+    // Add traits to a separate list, but only if this binding wins the name (a trait under a shadowed name isn't in scope)
+    auto add_trait = [&]() {
+        if( ir.m_bindings.type.binding.is_Trait() ) {
+            auto it = std::find(mod.m_traits.begin(), mod.m_traits.end(), ir.m_bindings.type.path);
+            if(it == mod.m_traits.end() ) {
+                mod.m_traits.push_back( ir.m_bindings.type.path );
+            }
         }
-    }
+    };
 
     bool was_import = (ir != mod.path() + name);
     if( list.count(name) > 0 )
@@ -88,6 +90,7 @@ void _add_item(const Span& sp, AST::Module& mod, IndexName location, const RcStr
         if( e.path == ir )
         {
             // Ignore, re-import of the same thing
+            add_trait();
 
             // Update the visibility, if this new visibility adds anything
             if( !e.vis.contains(vis) )
@@ -108,6 +111,7 @@ void _add_item(const Span& sp, AST::Module& mod, IndexName location, const RcStr
     else
     {
         DEBUG("### " << (was_import ? "Import" : "Add") << " " << location << " item " << mod.path() << " :: " << name << " = " << ir << vis);
+        add_trait();
         auto rec = list.insert(::std::make_pair(name, ::AST::Module::IndexEnt { was_import, mv$(vis), mv$(ir) } ));
         assert(rec.second);
     }
@@ -665,6 +669,23 @@ void Resolve_Index_Module_Wildcard(AST::Crate& crate, AST::Module& mod)
         {
             if( e.name != "" )
                 continue ;
+            if( e.is_prelude )
+            {
+                // The prelude sits outside the module, so its traits stay in scope even where a local name shadows them
+                AST::Module prelude { mod.path() };
+                Resolve_Index_Module_Wildcard__use_stmt(crate, prelude, e, i->vis);
+                for(auto loc : { IndexName::Namespace, IndexName::Type, IndexName::Value, IndexName::Macro })
+                {
+                    for(const auto& ent : get_mod_index(prelude, loc))
+                        _add_item(e.sp, mod, loc, ent.first, ent.second.vis, ent.second.path, false);
+                }
+                for(const auto& t : prelude.m_traits)
+                {
+                    if( std::find(mod.m_traits.begin(), mod.m_traits.end(), t) == mod.m_traits.end() )
+                        mod.m_traits.push_back(t);
+                }
+                continue ;
+            }
             Resolve_Index_Module_Wildcard__use_stmt(crate, mod, e, i->vis);
         }
     }

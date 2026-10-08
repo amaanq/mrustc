@@ -613,6 +613,7 @@ struct UseItem
         Span    sp; // Span covering just the path (final component)
         ::AST::Path path;
         RcString   name;   // If "", this is a glob/wildcard use
+        bool    is_prelude = false;
         friend ::std::ostream& operator<<(::std::ostream& os, const UseItem::Ent& x);
     };
     ::std::vector<Ent>  entries;

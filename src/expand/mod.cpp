@@ -2018,7 +2018,7 @@ void Expand_Mod(const ExpandState& es, ::AST::AbsolutePath modpath, ::AST::Modul
         {
             if( mod.m_insert_prelude && ! mod.is_anon() ) {
                 DEBUG("> Adding custom prelude " << es.crate.m_prelude_path);
-                mod.add_item(Span(), AST::Visibility::make_restricted(AST::Visibility::Ty::Private, mod.path()), "", ::AST::UseItem { Span(), ::make_vec1(::AST::UseItem::Ent { Span(), es.crate.m_prelude_path, "" }) }, {});
+                mod.add_item(Span(), AST::Visibility::make_restricted(AST::Visibility::Ty::Private, mod.path()), "", ::AST::UseItem { Span(), ::make_vec1(::AST::UseItem::Ent { Span(), es.crate.m_prelude_path, "", true }) }, {});
             }
             else {
                 DEBUG("> Not inserting custom prelude (anon or disabled)");

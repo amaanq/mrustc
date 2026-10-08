@@ -410,7 +410,7 @@ UseItem UseItem::clone() const
     decltype(this->entries) entries;
     for(const auto& e : this->entries)
     {
-        entries.push_back({ e.sp, e.path, e.name });
+        entries.push_back({ e.sp, e.path, e.name, e.is_prelude });
     }
     return UseItem {
         this->sp,
