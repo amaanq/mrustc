@@ -219,6 +219,14 @@ namespace {
         ERROR(sp, E0000, "Unknown register for x86/x86-64 - `" << str << "`");
     }
 
+    AsmCommon::RegisterClass get_reg_class_aarch64(const Span& sp, const RcString& str)
+    {
+        if(str == "reg"       ) return AsmCommon::RegisterClass::aarch64_reg;
+        if(str == "vreg"      ) return AsmCommon::RegisterClass::aarch64_vreg;
+        if(str == "vreg_low16") return AsmCommon::RegisterClass::aarch64_vreg_low16;
+        ERROR(sp, E0000, "Unknown register for aarch64 - `" << str << "`");
+    }
+
     AsmCommon::RegisterClass get_reg_class_riscv(const Span &sp, const RcString& str)
     {
         if(str == "reg"    )    return AsmCommon::RegisterClass::riscv_reg;
@@ -234,6 +242,8 @@ namespace {
             return get_reg_class_x8664(sp, str);
         if (Target_GetCurSpec().m_arch.m_name == "riscv64")
             return get_reg_class_riscv(sp, str);
+        if(Target_GetCurSpec().m_arch.m_name == "aarch64")
+            return get_reg_class_aarch64(sp, str);
         ERROR(sp, E0000, "Unknown architecture for asm!");
     }
 }
