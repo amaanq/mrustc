@@ -10,6 +10,8 @@
 #include <hir_typeck/monomorph.hpp>
 #include <hir/encoded_literal.hpp>
 #include <trans/target.hpp> // Target_GetPointerBits
+#include <hir/hir.hpp>
+#include <hir_typeck/static.hpp>
 
 namespace MIR {
     ::std::ostream& operator<<(::std::ostream& os, const Constant& v) {
@@ -1155,8 +1157,24 @@ const Monomorphiser& MIR::Cloner::monomorphiser() const
             }
         TU_ARMA(Evaluated, ve) {
             const auto& ty = this->value_generic_type(ce);
+            if( !ty.data().is_Primitive() ) {
+                // MIR constants can't hold an ADT literal, so park the value in a known `const` that `MIR_Cleanup` expands
+                const auto* r = resolve();
+                ASSERT_BUG(sp, r, "Non-primitive const generic " << ce << ": " << ty << " monomorphised without a crate");
+                auto& root = const_cast<HIR::Module&>(r->m_crate.m_root_module);
+                auto name = RcString::new_interned(FMT("#const_generic " << ty << " = " << *ve));
+                if( root.m_value_items.count(name) == 0 ) {
+                    HIR::Constant c { HIR::GenericParams(), ty.clone(), HIR::ExprPtr() };
+                    c.m_value_res = ve->clone();
+                    c.m_value_state = HIR::Constant::ValueState::Known;
+                    root.m_value_items.insert(std::make_pair(name, std::make_unique<HIR::VisEnt<HIR::ValueItem>>(HIR::VisEnt<HIR::ValueItem> {
+                        HIR::Publicity::new_global(),
+                        HIR::ValueItem(std::move(c))
+                        })));
+                }
+                return ::MIR::Constant::make_Const({ box$(HIR::Path(HIR::SimplePath(r->m_crate.m_crate_name, {name}))) });
+            }
             auto v = EncodedLiteralSlice(*ve);
-            ASSERT_BUG(sp, ty.data().is_Primitive(), "Handle non-primitive const generic: " << ty);
             // TODO: This is duplicated in `mir/from_hir_match.cpp` - De-duplicate?
             switch(ty.data().as_Primitive())
             {
