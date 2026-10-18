@@ -439,6 +439,28 @@
  }
  
  /// `NonNull` pointers are not `Send` because the data they reference may be aliased.
+--- library/stdarch/crates/core_arch/src/aarch64/mod.rs
++++ library/stdarch/crates/core_arch/src/aarch64/mod.rs
+@@ -27,15 +27,19 @@
+ 
+ // The rest of `core_arch::aarch64` is available on `arm64ec` but SVE is not supported on `arm64ec`.
+ #[cfg(any(all(target_arch = "aarch64", target_endian = "little"), doc))]
++#[cfg(not(rust_compiler = "mrustc"))]
+ mod sve;
+ #[cfg(any(all(target_arch = "aarch64", target_endian = "little"), doc))]
++#[cfg(not(rust_compiler = "mrustc"))]
+ #[unstable(feature = "stdarch_aarch64_sve", issue = "145052")]
+ pub use self::sve::*;
+ 
+ // The rest of `core_arch::aarch64` is available on `arm64ec` but SVE is not supported on `arm64ec`.
+ #[cfg(any(all(target_arch = "aarch64", target_endian = "little"), doc))]
++#[cfg(not(rust_compiler = "mrustc"))]
+ mod sve2;
+ #[cfg(any(all(target_arch = "aarch64", target_endian = "little"), doc))]
++#[cfg(not(rust_compiler = "mrustc"))]
+ #[unstable(feature = "stdarch_aarch64_sve", issue = "145052")]
+ pub use self::sve2::*;
+ 
 --- library/stdarch/crates/core_arch/src/x86/cpuid.rs
 +++ library/stdarch/crates/core_arch/src/x86/cpuid.rs
 @@ -62,6 +62,11 @@
