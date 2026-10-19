@@ -125,9 +125,10 @@ void Repository::load_vendored(const ::helpers::path& path)
 }
 void Repository::add_patch_path(const std::string& package_name, ::helpers::path path)
 {
-    auto manifest_path = path / "Cargo.toml";
+    auto manifest_path = (path / "Cargo.toml").normalise();
 
     auto loaded_manifest = ::std::shared_ptr<PackageManifest>( new PackageManifest(PackageManifest::load_from_toml(manifest_path, m_workspace_manifest)) );
+    m_path_cache.insert(::std::make_pair(manifest_path.str(), loaded_manifest));
 
     Entry   cache_ent;
     cache_ent.manifest_path = manifest_path;

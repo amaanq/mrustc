@@ -169,11 +169,11 @@ int main(int argc, const char* argv[])
         {
             DEBUG("Workspace manifest " << workspace_manifest_path);
             workspace_manifest = WorkspaceManifest::load_from_toml(workspace_manifest_path);
+            repo.set_workspace(workspace_manifest);
             DEBUG("- Applying patches");
             for(const auto& p : workspace_manifest.patches()) {
                 repo.add_patch_path(p.first, p.second);
             }
-            repo.set_workspace(workspace_manifest);
         }
 
         // 1. Load the Cargo.toml file from the passed directory
