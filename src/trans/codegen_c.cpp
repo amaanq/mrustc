@@ -5651,6 +5651,8 @@ namespace {
                 // If there is an explicit register, create a block and add `register uintptr_t asm_REGNAME asm("REGNAME");`
                 // - Requires updating the arg mappings, as doing so would remove the argument from the list.
                 bool block_open = false;
+                // `in("x0") a, lateout("x0") b` names one register twice, and both operands share its variable
+                std::set<std::string>   declared_regs;
                 for(size_t i = 0; i < se.params.size(); i ++)
                 {
                     if( const auto* pe = se.params[i].opt_Reg() ) {
@@ -5661,6 +5663,12 @@ namespace {
                             if( !block_open ) {
                                 block_open = true;
                                 m_of << indent << "{\n";
+                            }
+                            if( !declared_regs.insert(*regname_p).second ) {
+                                if( pe->input ) {
+                                    m_of << indent << "asm_" << *regname_p << " = (uintptr_t)"; emit_param(*pe->input); m_of << ";\n";
+                                }
+                                continue;
                             }
                             m_of << indent << "register uintptr_t asm_" << *regname_p << " asm(\"" << *regname_p << "\")";
                             if( pe->input ) {
