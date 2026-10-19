@@ -5744,6 +5744,16 @@ namespace {
                     for(const auto& f : l.frags)
                     {
                         m_of << FmtGccAsm(f.before, escape_percent, is_intel);
+                        if( const auto* ce = se.params[f.index].opt_Const() )
+                        {
+                            TU_MATCH_HDRA((*ce), {)
+                            default:
+                                MIR_TODO(mir_res, "Asm2 GCC - Const " << *ce << ": " << stmt);
+                            TU_ARMA(Int, c) m_of << c.v;
+                            TU_ARMA(Uint, c) m_of << c.v;
+                            }
+                            continue;
+                        }
                         MIR_ASSERT(mir_res, arg_mappings.at(f.index) != UINT_MAX, stmt);
                         m_of << "%";
                         if( arg_mappings.at(f.index) == UINT8_MAX-1 ) {
