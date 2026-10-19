@@ -2822,6 +2822,108 @@ namespace {
             TRACE_FUNCTION_F(p);
 
             m_of << "// EXTERN extern \"" << item.m_abi << "\" " << p << "\n";
+            const auto& llvm_name = item.m_linkage.name;
+            // stdarch names each aarch64 binding after its ACLE intrinsic plus one underscore, but keeps LLVM's operand order for structure loads, stores and
+            // table lookups. A macro expands the call inside the #[target_feature] caller, which GCC needs both to accept the intrinsic and to see immediates
+            // as constants. sqshlu gets its shift as a vector where ACLE wants an immediate, and GCC 15 rejects any vluti lane that is not a literal.
+            if( m_compiler == Compiler::Gcc && p.m_data.is_Generic()
+                && (llvm_name.rfind("llvm.aarch64.neon.", 0) == 0 || llvm_name.rfind("llvm.aarch64.crypto.", 0) == 0 || llvm_name.rfind("llvm.aarch64.crc32", 0) == 0)
+                && llvm_name.rfind("llvm.aarch64.neon.sqshlu.", 0) != 0 && llvm_name.rfind("llvm.aarch64.neon.vluti", 0) != 0 )
+            {
+                const size_t n_args = item.m_args.size();
+                ::std::vector<::std::string>    acle_types;
+                for(const auto& arg : item.m_args)
+                {
+                    const auto& ty = arg.second;
+                    if( ty.data().is_Path() )
+                        acle_types.push_back(ty.data().as_Path().path.m_data.as_Generic().m_path.components().back().c_str());
+                    else if( ty == ::HIR::CoreType::F16 )
+                        acle_types.push_back("float16_t");
+                    else
+                        acle_types.push_back("");
+                }
+
+                ::std::stringstream decls;
+                auto value = [&](size_t i) {
+                    decls << "__typeof__(acle_p" << i << ") acle_a" << i << " = (acle_p" << i << "); ";
+                    decls << acle_types[i] << " acle_v" << i << "; memcpy(&acle_v" << i << ", &acle_a" << i << ", sizeof(acle_v" << i << ")); ";
+                    return FMT("acle_v" << i);
+                    };
+                auto tuple = [&](size_t first, size_t count) {
+                    const auto& vty = acle_types[first];
+                    decls << vty.substr(0, vty.size() - 2) << "x" << count << "_t acle_t" << first << "; ";
+                    for(size_t k = 0; k < count; k ++)
+                    {
+                        decls << "__typeof__(acle_p" << first+k << ") acle_a" << first+k << " = (acle_p" << first+k << "); ";
+                        decls << "memcpy(&acle_t" << first << ".val[" << k << "], &acle_a" << first+k << ", sizeof(acle_t" << first << ".val[" << k << "])); ";
+                    }
+                    return FMT("acle_t" << first);
+                    };
+                auto pass = [&](size_t i) {
+                    if( item.m_args[i].second.data().is_Pointer() )
+                        return FMT("(void*)(acle_p" << i << ")");
+                    if( !acle_types[i].empty() )
+                        return value(i);
+                    return FMT("(acle_p" << i << ")");
+                    };
+
+                ::std::string   acle_name = p.m_data.as_Generic().m_path.components().back().c_str() + 1;
+                ::std::vector<::std::string>    call_args;
+                size_t n_lead = 0;
+                while( n_lead < n_args && !acle_types[n_lead].empty() && acle_types[n_lead] == acle_types[0] )
+                    n_lead ++;
+                bool is_tbx = llvm_name.rfind("llvm.aarch64.neon.tbx", 0) == 0;
+                if( is_tbx || llvm_name.rfind("llvm.aarch64.neon.tbl", 0) == 0 )
+                {
+                    acle_name += "_s8";
+                    size_t first = is_tbx ? 1 : 0;
+                    size_t count = llvm_name[sizeof("llvm.aarch64.neon.tbl") - 1] - '0';
+                    if( is_tbx )
+                        call_args.push_back(value(0));
+                    call_args.push_back(count > 1 ? tuple(first, count) : value(first));
+                    for(size_t i = first + count; i < n_args; i ++)
+                        call_args.push_back(pass(i));
+                }
+                else if( n_lead >= 2 && item.m_args.back().second.data().is_Pointer()
+                    && ::std::all_of(acle_types.begin() + n_lead, acle_types.end() - 1, [](const ::std::string& t){ return t.empty(); }) )
+                {
+                    call_args.push_back(pass(n_args - 1));
+                    call_args.push_back(tuple(0, n_lead));
+                    for(size_t i = n_lead; i < n_args - 1; i ++)
+                        call_args.push_back(pass(i));
+                }
+                else
+                {
+                    for(size_t i = 0; i < n_args; i ++)
+                        call_args.push_back(pass(i));
+                }
+
+                ::std::stringstream call;
+                call << acle_name << "(";
+                for(size_t i = 0; i < call_args.size(); i ++)
+                    call << (i > 0 ? ", " : "") << call_args[i];
+                call << ")";
+
+                m_of << "#include <arm_neon.h>\n#include <arm_acle.h>\n";
+                m_of << "#define " << Trans_Mangle(p) << "(";
+                for(size_t i = 0; i < n_args; i ++)
+                    m_of << (i > 0 ? ", " : "") << "acle_p" << i;
+                m_of << ") ({ " << decls.str();
+                if( item.m_return == ::HIR::TypeRef::new_unit() ) {
+                    m_of << call.str() << "; })\n";
+                }
+                else if( item.m_return.data().is_Path() || item.m_return == ::HIR::CoreType::F16 ) {
+                    m_of << "__typeof__(" << call.str() << ") acle_r = " << call.str() << "; ";
+                    emit_ctype(item.m_return, FMT_CB(ss, ss << "acle_rv";));
+                    m_of << "; memcpy(&acle_rv, &acle_r, sizeof(acle_rv)); acle_rv; })\n";
+                }
+                else {
+                    emit_ctype(item.m_return, FMT_CB(ss, ss << "acle_rv";));
+                    m_of << " = " << call.str() << "; acle_rv; })\n";
+                }
+                m_mir_res = nullptr;
+                return ;
+            }
             // For MSVC, make a static wrapper that goes and calls the actual function
             if( item.m_linkage.name.rfind("llvm.", 0) == 0 )
             {
