@@ -722,6 +722,9 @@ namespace
         MonomorphState  out_params;
         auto e = state.m_resolve.get_value(state.sp, path, out_params, /*sig_only*/false, &params.impl_params_def);
         DEBUG(e.tag_str() << " " << out_params);
+        // Like LLVM, keep a #[target_feature] body out of callers that may lack the features, or its asm outlives the gcc target attribute
+        if( e.is_Function() && !e.as_Function()->m_markings.target_features.empty() )
+            return nullptr;
         params.fcn_params = out_params.get_method_params();
         params.impl_params = out_params.pp_impl == nullptr ? ::HIR::PathParams()
             : out_params.pp_impl == &out_params.pp_impl_data ? std::move(out_params.pp_impl_data)
