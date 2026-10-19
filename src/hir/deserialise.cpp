@@ -829,6 +829,7 @@ namespace {
             rv.rustc_legacy_const_generics = deserialise_vec<unsigned>();
             rv.track_caller = m_in.read_bool();
             rv.unstable_feature = m_in.read_istring();
+            rv.target_features = deserialise_vec<RcString>();
             return rv;
         }
         ::std::vector< ::std::pair< ::HIR::Pattern, ::HIR::TypeRef> >   deserialise_fcnargs()

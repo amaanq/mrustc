@@ -211,6 +211,7 @@ public:
         bool track_caller = false;
         bool is_naked = false;
         RcString unstable_feature;
+        std::vector<RcString> target_features;
         enum Inline {
             Auto,   // no annotation
             Never,  // #[inline(never)]

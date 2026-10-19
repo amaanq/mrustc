@@ -1233,6 +1233,7 @@
             serialise_vec(m.rustc_legacy_const_generics);
             m_out.write_bool(m.track_caller);
             m_out.write_string(m.unstable_feature);
+            serialise_vec(m.target_features);
         }
         void serialise(const ::HIR::Constant& item)
         {

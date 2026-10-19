@@ -5995,6 +5995,31 @@ namespace {
                     TODO(Span(), "Naked functions in msvc");
                 }
             }
+            // GNU as rejects aarch64 instructions outside the function's -march, where x86 accepts them all.
+            // GCC spells a few of rustc's feature names differently, and FEAT_DIT has no modifier, only Armv8.4-A
+            if( m_compiler == Compiler::Gcc && Target_GetCurSpec().m_arch.m_name == "aarch64" && !item.m_markings.target_features.empty() )
+            {
+                static const ::std::pair<const char*, const char*> gcc_names[] = {
+                    { "neon", "simd" }, { "rdm", "rdma" }, { "fhm", "fp16fml" },
+                    { "rand", "rng" }, { "mte", "memtag" }, { "jsconv", "jscvt" },
+                    };
+                ::std::string   arch;
+                ::std::string   extensions;
+                for(const auto& feature : item.m_markings.target_features)
+                {
+                    if( feature == "dit" ) {
+                        arch = "arch=armv8.4-a";
+                        continue;
+                    }
+                    const char* name = feature.c_str();
+                    for(const auto& rename : gcc_names)
+                        if( feature == rename.first )
+                            name = rename.second;
+                    extensions += "+";
+                    extensions += name;
+                }
+                m_of << "__attribute__((target(\"" << arch << extensions << "\"))) ";
+            }
             auto cb = FMT_CB(ss,
                 // TODO: Cleaner ABI handling
                 if( item.m_abi == "system" && m_compiler == Compiler::Msvc )

@@ -1876,6 +1876,29 @@ namespace {
                 break;
         }
     }
+    for(const auto& a : attrs.m_items)
+    {
+        if( a.name() != "target_feature" )
+            continue;
+        TTStream    lex(a.span(), ParseState(), a.data());
+        lex.getTokenCheck(TOK_PAREN_OPEN);
+        while( lex.lookahead(0) == TOK_IDENT )
+        {
+            auto key = lex.getTokenCheck(TOK_IDENT).ident().name;
+            lex.getTokenCheck(TOK_EQUAL);
+            auto val = lex.getTokenCheck(TOK_STRING).str();
+            if( key == "enable" )
+            {
+                for(size_t start = 0, end; start <= val.size(); start = end + 1)
+                {
+                    end = ::std::min(val.find(',', start), val.size());
+                    markings.target_features.push_back( RcString::new_interned(val.substr(start, end - start)) );
+                }
+            }
+            if( !lex.getTokenIf(TOK_COMMA) )
+                break;
+        }
+    }
     markings.is_naked = f.m_markings.is_naked;
 
     ::HIR::Linkage  linkage;
