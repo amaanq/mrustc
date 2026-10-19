@@ -2917,6 +2917,19 @@ namespace {
                     }
                     m_of << "\treturn ;\n";
                 }
+                else if( m_compiler == Compiler::Gcc && (item.m_linkage.name == "llvm.aarch64.dmb" || item.m_linkage.name == "llvm.aarch64.dsb"
+                        || item.m_linkage.name == "llvm.aarch64.isb" || item.m_linkage.name == "llvm.aarch64.hint") )
+                {
+                    // The operand is an immediate in the instruction, but reaches the shim as a value
+                    auto mnemonic = item.m_linkage.name.substr(sizeof("llvm.aarch64.") - 1);
+                    unsigned count = mnemonic == "hint" ? 128 : 16;
+                    m_of << "\tswitch(arg0) {\n";
+                    for(unsigned i = 0; i < count; i ++)
+                        m_of << "\tcase " << i << ": __asm__ __volatile__ (\"" << mnemonic << " #" << i << "\" ::: \"memory\"); break;\n";
+                    m_of << "\tdefault: abort();\n";
+                    m_of << "\t}\n";
+                    m_of << "\treturn ;\n";
+                }
                 // AES functions
                 else if( item.m_linkage.name.rfind("llvm.x86.aesni.", 0) == 0 )
                 {
